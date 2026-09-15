@@ -29,8 +29,6 @@ db_url = os.environ.get('DATABASE_URL')
 if db_url:
     if db_url.startswith('postgres://'):
         db_url = db_url.replace('postgres://', 'postgresql://', 1)
-    if 'sslmode=' not in db_url and 'sqlite' not in db_url:
-        db_url += ('&sslmode=require' if '?' in db_url else '?sslmode=require')
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'pool_pre_ping': True,
@@ -89,6 +87,18 @@ with app.app_context():
         seed_default_expense_categories()
     except Exception as e:
         print(f"Postponed app context initialization: {e}")
+
+@app.errorhandler(500)
+def handle_500_error(e):
+    import traceback
+    tb = traceback.format_exc()
+    return f"<h1>500 Internal Server Error</h1><pre>{tb}</pre>", 500
+
+@app.errorhandler(Exception)
+def handle_general_exception(e):
+    import traceback
+    tb = traceback.format_exc()
+    return f"<h1>Unhandled Server Exception</h1><pre>{tb}</pre>", 500
 
 def log_audit(franchise_id, stage_name, action, performed_by, field_changed='-', old_value='-', new_value='-', remarks=''):
     try:
