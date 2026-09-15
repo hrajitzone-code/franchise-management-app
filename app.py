@@ -154,6 +154,7 @@ def apply_date_filter(query, date_preset, date_col):
 # --- ROUTES & APIs ---
 
 @app.route('/')
+@app.route('/api/index')
 def index():
     return render_template('index.html')
 

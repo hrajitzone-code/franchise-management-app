@@ -10,11 +10,16 @@ if parent_dir not in sys.path:
 try:
     from app import app as flask_app
 
-    class SafeWSGIMiddleware:
+    class PrefixStripperMiddleware:
         def __init__(self, wsgi_app):
             self.wsgi_app = wsgi_app
 
         def __call__(self, environ, start_response):
+            path = environ.get('PATH_INFO', '')
+            if path == '/api/index' or path == '/api/index/':
+                environ['PATH_INFO'] = '/'
+            elif path.startswith('/api/index/'):
+                environ['PATH_INFO'] = path[10:]
             try:
                 return self.wsgi_app(environ, start_response)
             except Exception:
@@ -22,10 +27,10 @@ try:
                 status = '200 OK'
                 response_headers = [('Content-Type', 'text/html; charset=utf-8')]
                 start_response(status, response_headers)
-                html = f'<html><body><h1>WSGI Serverless Diagnostic Log</h1><pre>{err_text}</pre></body></html>'
+                html = f'<html><body><h1>WSGI Diagnostic Log</h1><pre>{err_text}</pre></body></html>'
                 return [html.encode('utf-8')]
 
-    app = SafeWSGIMiddleware(flask_app)
+    app = PrefixStripperMiddleware(flask_app)
 
 except Exception:
     startup_err = traceback.format_exc()
