@@ -16,8 +16,10 @@ try:
 
         def __call__(self, environ, start_response):
             path = environ.get('PATH_INFO', '')
-            if path == '/api/index' or path == '/api/index/':
+            if path in ['/api', '/api/', '/api/index', '/api/index/']:
                 environ['PATH_INFO'] = '/'
+            elif path.startswith('/api/'):
+                environ['PATH_INFO'] = path[4:]
             elif path.startswith('/api/index/'):
                 environ['PATH_INFO'] = path[10:]
             try:
