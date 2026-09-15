@@ -81,12 +81,19 @@ def seed_default_expense_categories():
             db.session.add(ExpenseCategory(name=name, description=desc, is_active=True))
     db.session.commit()
 
-with app.app_context():
-    try:
-        db.create_all()
-        seed_default_expense_categories()
-    except Exception as e:
-        print(f"Postponed app context initialization: {e}")
+_db_initialized = False
+
+@app.before_request
+def initialize_database_lazily():
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            db.create_all()
+            seed_default_expense_categories()
+        except Exception as e:
+            print(f"Lazy DB initialization warning: {e}")
+        finally:
+            _db_initialized = True
 
 @app.errorhandler(500)
 def handle_500_error(e):
