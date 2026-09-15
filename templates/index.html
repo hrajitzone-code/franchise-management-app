@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Franchise OS Management Software</title>
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div id="app-container">
+
+  <!-- Sidebar Navigation -->
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-left">
+        <i class="fa-solid fa-store font-size-1-5"></i>
+        <span class="brand-name">Franchise OS</span>
+      </div>
+      <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Collapse Sidebar">
+        <i class="fa-solid fa-chevron-left" id="toggle-icon"></i>
+      </button>
+    </div>
+
+    <div class="sidebar-menu-wrapper">
+      <!-- Quick Dashboard Item -->
+      <div class="nav-single-item active" id="nav-dashboard">
+        <a href="javascript:void(0)" onclick="switchPage('dashboard')">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span class="nav-text">Dashboard Overview</span>
+        </a>
+      </div>
+
+      <!-- 1. Lead & Sales Pipeline -->
+      <div class="nav-category" id="cat-lead">
+        <div class="nav-category-header" onclick="toggleCategory('cat-lead')">
+          <div class="category-title">
+            <i class="fa-solid fa-filter-circle-dollar category-icon"></i>
+            <span class="nav-text">Lead & Sales Pipeline</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li id="nav-leads"><a href="javascript:void(0)" onclick="switchPage('leads')"><i class="fa-solid fa-users"></i> <span class="nav-text">Leads & Assignment</span></a></li>
+          <li id="nav-calling"><a href="javascript:void(0)" onclick="switchPage('calling')"><i class="fa-solid fa-phone"></i> <span class="nav-text">Calling History</span></a></li>
+          <li id="nav-followup"><a href="javascript:void(0)" onclick="switchPage('followup')"><i class="fa-solid fa-calendar-check"></i> <span class="nav-text">Follow-ups</span></a></li>
+          <li id="nav-plans"><a href="javascript:void(0)" onclick="switchPage('plans')"><i class="fa-solid fa-box-archive"></i> <span class="nav-text">Plan Selection</span></a></li>
+        </ul>
+      </div>
+
+      <!-- 2. Commercial & Outstanding -->
+      <div class="nav-category" id="cat-commercials">
+        <div class="nav-category-header" onclick="toggleCategory('cat-commercials')">
+          <div class="category-title">
+            <i class="fa-solid fa-file-signature category-icon"></i>
+            <span class="nav-text">Commercial & Outstanding</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li id="nav-token"><a href="javascript:void(0)" onclick="switchPage('token')"><i class="fa-solid fa-receipt"></i> <span class="nav-text">Token Advance</span></a></li>
+          <li id="nav-survey"><a href="javascript:void(0)" onclick="switchPage('survey')"><i class="fa-solid fa-clipboard-check"></i> <span class="nav-text">Survey & Visit</span></a></li>
+          <li id="nav-agreement"><a href="javascript:void(0)" onclick="switchPage('agreement')"><i class="fa-solid fa-file-contract"></i> <span class="nav-text">Approval & Agreement</span></a></li>
+          <li id="nav-payments"><a href="javascript:void(0)" onclick="switchPage('payments')"><i class="fa-solid fa-credit-card"></i> <span class="nav-text">Franchise Payments & Outstanding</span></a></li>
+          <li id="nav-visit_expenses"><a href="javascript:void(0)" onclick="switchPage('visit_expenses')"><i class="fa-solid fa-plane-departure"></i> <span class="nav-text">Visit Expense</span></a></li>
+        </ul>
+      </div>
+
+      <!-- 3. Store Setup & Launch -->
+      <div class="nav-category" id="cat-setup">
+        <div class="nav-category-header" onclick="toggleCategory('cat-setup')">
+          <div class="category-title">
+            <i class="fa-solid fa-rocket category-icon"></i>
+            <span class="nav-text">Store Setup & Launch</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li id="nav-interior"><a href="javascript:void(0)" onclick="switchPage('interior')"><i class="fa-solid fa-compass-drafting"></i> <span class="nav-text">Interior & Store Setup</span></a></li>
+          <li id="nav-branding"><a href="javascript:void(0)" onclick="switchPage('branding')"><i class="fa-solid fa-bullhorn"></i> <span class="nav-text">Branding Setup</span></a></li>
+          <li id="nav-marketing"><a href="javascript:void(0)" onclick="switchPage('marketing')"><i class="fa-solid fa-rectangle-ad"></i> <span class="nav-text">Marketing Campaigns</span></a></li>
+          <li id="nav-training"><a href="javascript:void(0)" onclick="switchPage('training')"><i class="fa-solid fa-chalkboard-user"></i> <span class="nav-text">Staff Training</span></a></li>
+          <li id="nav-operations"><a href="javascript:void(0)" onclick="switchPage('operations')"><i class="fa-solid fa-list-check"></i> <span class="nav-text">Store Operations & SOPs</span></a></li>
+          <li id="nav-influencer"><a href="javascript:void(0)" onclick="switchPage('influencer')"><i class="fa-solid fa-hashtag"></i> <span class="nav-text">Influencer Campaigns</span></a></li>
+          <li id="nav-opening"><a href="javascript:void(0)" onclick="switchPage('opening')"><i class="fa-solid fa-ribbon"></i> <span class="nav-text">Franchise Opening</span></a></li>
+        </ul>
+      </div>
+
+      <!-- 4. Active Franchise -->
+      <div class="nav-category" id="cat-active">
+        <div class="nav-category-header" onclick="toggleCategory('cat-active')">
+          <div class="category-title">
+            <i class="fa-solid fa-building-circle-check category-icon"></i>
+            <span class="nav-text">Active Franchise</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li id="nav-active"><a href="javascript:void(0)" onclick="switchPage('active')"><i class="fa-solid fa-building-circle-check"></i> <span class="nav-text">Active Franchises Directory</span></a></li>
+        </ul>
+      </div>
+
+      <!-- 5. Purchase & Inventory -->
+      <div class="nav-category" id="cat-purchase">
+        <div class="nav-category-header" onclick="toggleCategory('cat-purchase')">
+          <div class="category-title">
+            <i class="fa-solid fa-boxes-stacked category-icon"></i>
+            <span class="nav-text">Purchase & Inventory</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li id="nav-materials"><a href="javascript:void(0)" onclick="switchPage('materials')"><i class="fa-solid fa-boxes-stacked"></i> <span class="nav-text">Material & Assets</span></a></li>
+          <li id="nav-purchases"><a href="javascript:void(0)" onclick="switchPage('purchases')"><i class="fa-solid fa-cart-flatbed"></i> <span class="nav-text">Purchases Log</span></a></li>
+          <li id="nav-gr"><a href="javascript:void(0)" onclick="switchPage('gr')"><i class="fa-solid fa-right-left"></i> <span class="nav-text">Goods Return (GR)</span></a></li>
+        </ul>
+      </div>
+
+      <!-- 6. Financials -->
+      <div class="nav-category" id="cat-financials">
+        <div class="nav-category-header" onclick="toggleCategory('cat-financials')">
+          <div class="category-title">
+            <i class="fa-solid fa-wallet category-icon"></i>
+            <span class="nav-text">Financials</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li id="nav-expenses"><a href="javascript:void(0)" onclick="switchPage('expenses')"><i class="fa-solid fa-wallet"></i> <span class="nav-text">Expenses</span></a></li>
+          <li id="nav-support"><a href="javascript:void(0)" onclick="switchPage('support')"><i class="fa-solid fa-hand-holding-hand"></i> <span class="nav-text">Company Support</span></a></li>
+        </ul>
+      </div>
+
+      <!-- 7. Support & Governance -->
+      <div class="nav-category" id="cat-support">
+        <div class="nav-category-header" onclick="toggleCategory('cat-support')">
+          <div class="category-title">
+            <i class="fa-solid fa-shield-halved category-icon"></i>
+            <span class="nav-text">Support</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li id="nav-audit"><a href="javascript:void(0)" onclick="switchPage('audit')"><i class="fa-solid fa-clock-rotate-left"></i> <span class="nav-text">Audit History</span></a></li>
+          <li id="nav-permissions"><a href="javascript:void(0)" onclick="switchPage('permissions')"><i class="fa-solid fa-user-shield"></i> <span class="nav-text">User Permissions</span></a></li>
+        </ul>
+      </div>
+
+      <!-- 8. Reports -->
+      <div class="nav-category" id="cat-reports">
+        <div class="nav-category-header" onclick="toggleCategory('cat-reports')">
+          <div class="category-title">
+            <i class="fa-solid fa-chart-line category-icon"></i>
+            <span class="nav-text">Reports</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li id="nav-performance"><a href="javascript:void(0)" onclick="switchPage('performance')"><i class="fa-solid fa-chart-line"></i> <span class="nav-text">Performance Analytics</span></a></li>
+          <li id="nav-reports"><a href="javascript:void(0)" onclick="switchPage('reports')"><i class="fa-solid fa-file-export"></i> <span class="nav-text">Reports & Exports</span></a></li>
+        </ul>
+      </div>
+
+      <!-- 9. Settings -->
+      <div class="nav-category" id="cat-settings">
+        <div class="nav-category-header" onclick="toggleCategory('cat-settings')">
+          <div class="category-title">
+            <i class="fa-solid fa-gear category-icon"></i>
+            <span class="nav-text">Settings</span>
+          </div>
+          <i class="fa-solid fa-chevron-down category-arrow"></i>
+        </div>
+        <ul class="submenu">
+          <li><a href="javascript:void(0)" onclick="openExpenseCategoryModal()"><i class="fa-solid fa-tags"></i> <span class="nav-text">Expense Categories Master</span></a></li>
+        </ul>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Wrapper -->
+  <main id="main-wrapper">
+
+    <!-- Reference Header Bar -->
+    <header id="top-header">
+      <div class="header-left">
+        <div class="header-icon-box">
+          <i class="fa-solid fa-store"></i>
+        </div>
+        <div class="header-title-group">
+          <h1>Franchise</h1>
+          <p>Select a franchise to view complete details, history and performance.</p>
+        </div>
+      </div>
+
+      <div class="header-right-actions">
+        <div class="search-input-pill">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input type="text" id="global-search" placeholder="Search franchise by name, location...">
+        </div>
+
+        <button onclick="loadSampleTemporaryData()" style="background-color: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; border-radius: 9999px; padding: 8px 16px; font-weight: 600; font-size: 0.85rem; cursor: pointer;">
+          <i class="fa-solid fa-database"></i> Add Temporary Data
+        </button>
+
+        <button onclick="openNewFranchiseModal()" class="btn-add-franchise">
+          <i class="fa-solid fa-plus"></i> Add Franchise
+        </button>
+      </div>
+    </header>
+
+    <!-- Global Combined Filters Bar -->
+    <div class="filter-bar">
+      <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-filter"></i> Filters:</span>
+      
+      <select id="filter-person">
+        <option value="">All Executive Persons</option>
+        <option value="Rajesh Kumar">Rajesh Kumar</option>
+        <option value="Vikram Singh">Vikram Singh</option>
+        <option value="Ananya Sharma">Ananya Sharma</option>
+        <option value="Priya Nair">Priya Nair</option>
+      </select>
+
+      <select id="filter-date-preset">
+        <option value="Till Now" selected>Date: Till Now (All Time)</option>
+        <option value="Today">Today</option>
+        <option value="7 Days">Last 7 Days</option>
+        <option value="30 Days">Last 30 Days</option>
+        <option value="This Month">This Month</option>
+        <option value="Quarterly">Quarterly</option>
+        <option value="Half Yearly">Half Yearly</option>
+        <option value="Yearly">Yearly</option>
+        <option value="Custom Date">Custom Date Range</option>
+      </select>
+
+      <div id="custom-date-container" style="display: none; align-items: center; gap: 6px;">
+        <input type="date" id="custom-date-from" style="padding: 4px 8px; font-size: 0.8rem;">
+        <span style="font-size: 0.8rem;">to</span>
+        <input type="date" id="custom-date-to" style="padding: 4px 8px; font-size: 0.8rem;">
+      </div>
+
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+        <i class="fa-solid fa-user-gear text-muted"></i>
+        <select id="user-role-select" style="padding: 4px 8px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="Admin" selected>Role: Admin</option>
+          <option value="Manager">Role: Manager</option>
+          <option value="Field Executive">Role: Field Executive</option>
+          <option value="Accountant">Role: Accountant</option>
+          <option value="Franchisee">Role: Franchisee</option>
+        </select>
+        <span class="role-badge" id="current-role-badge">Admin</span>
+      </div>
+    </div>
+
+    <!-- Main Workspace Container -->
+    <div id="main-workspace">
+
+      <!-- 1. CLEAN DASHBOARD OVERVIEW ONLY -->
+      <section id="dashboard-overview">
+        <!-- KPI Cards Grid -->
+        <div class="kpi-container">
+          <div class="kpi-card">
+            <div class="kpi-info">
+              <h4>Total Franchises</h4>
+              <p id="kpi-total-franchises">0</p>
+            </div>
+            <div class="kpi-icon icon-blue"><i class="fa-solid fa-store"></i></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-info">
+              <h4>Active Franchises</h4>
+              <p id="kpi-active-franchises">0</p>
+            </div>
+            <div class="kpi-icon icon-green"><i class="fa-solid fa-circle-check"></i></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-info">
+              <h4>Net Purchase</h4>
+              <p id="kpi-net-purchase">Rs. 0</p>
+            </div>
+            <div class="kpi-icon icon-purple"><i class="fa-solid fa-chart-bar"></i></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-info">
+              <h4>GR Percentage</h4>
+              <p id="kpi-gr-percent">0%</p>
+            </div>
+            <div class="kpi-icon icon-red"><i class="fa-solid fa-percent"></i></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-info">
+              <h4>Outstanding Balance</h4>
+              <p id="kpi-outstanding">Rs. 0</p>
+            </div>
+            <div class="kpi-icon icon-orange"><i class="fa-solid fa-triangle-exclamation"></i></div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-info">
+              <h4>Company Support</h4>
+              <p id="kpi-company-support">Rs. 0</p>
+            </div>
+            <div class="kpi-icon icon-blue"><i class="fa-solid fa-hand-holding-hand"></i></div>
+          </div>
+        </div>
+
+        <!-- Franchise Cards Workspace (3-Column Layout Matching Screenshot) -->
+        <div class="page-content">
+          <div id="franchise-cards-grid" class="franchise-grid">
+            <!-- Dynamic Franchise Cards Rendered Here -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. EXPLORE FRANCHISE PROFILE VIEW -->
+      <section id="explore-franchise-view" style="display: none;" class="page-content">
+        <div style="margin-top: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+          <button onclick="switchPage('dashboard')" style="background: none; border: none; color: var(--accent-blue); font-weight: 600; cursor: pointer; font-size: 0.9rem;">
+            <i class="fa-solid fa-arrow-left"></i> Back to Dashboard
+          </button>
+          
+          <button onclick="deleteFranchiseCard(activeFranchiseId)" style="background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; padding: 6px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem;">
+            <i class="fa-solid fa-trash-can"></i> Delete This Franchise
+          </button>
+        </div>
+
+        <div class="profile-container">
+          <div class="profile-header">
+            <div>
+              <h2 id="prof-franchise-name" style="margin: 0; font-size: 1.4rem;">Franchise Profile</h2>
+              <div id="prof-franchise-code" style="font-size: 0.85rem; color: #94A3B8; margin-top: 4px;">Code</div>
+              <div id="prof-owner-info" style="font-size: 0.85rem; color: #E2E8F0; margin-top: 4px;">Owner Info</div>
+              <div id="prof-executive-info" style="font-size: 0.85rem; color: #38BDF8; margin-top: 2px;">Executive Info</div>
+            </div>
+
+            <div style="display: flex; gap: 15px; text-align: right;">
+              <div>
+                <span style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase;">Net Purchase</span>
+                <div id="prof-net-purchase" style="font-size: 1.1rem; font-weight: 700; color: #60A5FA;">Rs. 0</div>
+              </div>
+              <div>
+                <span style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase;">GR%</span>
+                <div id="prof-gr-percent" style="font-size: 1.1rem; font-weight: 700; color: #F87171;">0%</div>
+              </div>
+              <div>
+                <span style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase;">Outstanding</span>
+                <div id="prof-outstanding" style="font-size: 1.1rem; font-weight: 700; color: #FBBF24;">Rs. 0</div>
+              </div>
+              <div>
+                <span style="font-size: 0.75rem; color: #94A3B8; text-transform: uppercase;">Company Support</span>
+                <div id="prof-company-support" style="font-size: 1.1rem; font-weight: 700; color: #34D399;">Rs. 0</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding: 10px 25px; background: #F8FAFC; border-bottom: 1px solid #CBD5E1; display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 0.85rem; font-weight: 600;"><i class="fa-solid fa-user-filter"></i> Person-Wise Work History Filter:</span>
+              <select id="profile-person-filter" onchange="loadFranchiseProfileData(activeFranchiseId)" style="padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; border: 1px solid #CBD5E1;">
+                <option value="">All Assigned Staff / Executives</option>
+                <option value="Rajesh Kumar">Rajesh Kumar</option>
+                <option value="Vikram Singh">Vikram Singh</option>
+                <option value="Ananya Sharma">Ananya Sharma</option>
+              </select>
+            </div>
+
+            <div style="display: flex; gap: 8px;">
+              <button onclick="triggerReportExport('pdf')" style="background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem;">
+                <i class="fa-solid fa-file-pdf"></i> Export PDF
+              </button>
+              <button onclick="triggerReportExport('excel')" style="background: #ECFDF5; color: #059669; border: 1px solid #A7F3D0; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem;">
+                <i class="fa-solid fa-file-excel"></i> Export Excel
+              </button>
+              <button onclick="triggerReportExport('word')" style="background: #FDF2F8; color: #DB2777; border: 1px solid #FBCFE8; padding: 6px 12px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem;">
+                <i class="fa-solid fa-file-word"></i> Export Word
+              </button>
+            </div>
+          </div>
+
+          <div class="profile-nav-tabs">
+            <button class="active" onclick="switchProfileTab('overview', event)">Lead Overview</button>
+            <button onclick="switchProfileTab('calling', event)">Calling History</button>
+            <button onclick="switchProfileTab('followup', event)">Follow-ups</button>
+            <button onclick="switchProfileTab('plan', event)">Plan Details</button>
+            <button onclick="switchProfileTab('token', event)">Token Advance</button>
+            <button onclick="switchProfileTab('survey', event)">Survey PDF & Versions</button>
+            <button onclick="switchProfileTab('visit', event)">Site Visit</button>
+            <button onclick="switchProfileTab('approval', event)">Approval</button>
+            <button onclick="switchProfileTab('agreement', event)">Agreement</button>
+            <button onclick="switchProfileTab('payment', event)">Franchise Payments & Outstanding</button>
+            <button onclick="switchProfileTab('visit_expenses', event)">Visit Expense</button>
+            <button onclick="switchProfileTab('interior', event)">Interior</button>
+            <button onclick="switchProfileTab('branding', event)">Branding Setup</button>
+            <button onclick="switchProfileTab('marketing', event)">Marketing Campaigns</button>
+            <button onclick="switchProfileTab('training', event)">Staff Training</button>
+            <button onclick="switchProfileTab('operations', event)">Store Operations & SOPs</button>
+            <button onclick="switchProfileTab('influencer', event)">Influencers</button>
+            <button onclick="switchProfileTab('materials', event)">Material & Assets (Balance)</button>
+            <button onclick="switchProfileTab('purchases', event)">Purchases Log (Inventory)</button>
+            <button onclick="switchProfileTab('gr', event)">GR / Goods Return</button>
+            <button onclick="switchProfileTab('expenses', event)">Expenses</button>
+            <button onclick="switchProfileTab('company_support', event)">What We Provided (Company Support)</button>
+            <button onclick="switchProfileTab('documents', event)">Documents</button>
+            <button onclick="switchProfileTab('timeline', event)">Complete Timeline</button>
+            <button onclick="switchProfileTab('performance', event)">Performance Rating</button>
+          </div>
+
+          <div id="profile-tab-body" class="profile-tab-content"></div>
+        </div>
+      </section>
+
+      <!-- 3. SEPARATE MODULE PAGES WORKSPACE -->
+      <section id="module-page-view" style="display: none;" class="page-content">
+        <div style="margin-top: 15px; background: #FFFFFF; border-radius: 12px; border: 1px solid var(--border-color); padding: 25px;">
+          <h2 id="module-page-title" style="margin-top: 0; color: var(--text-main);">Module Title</h2>
+          <p id="module-page-desc" style="color: var(--text-muted);">Separate working workspace page for managing module entries.</p>
+
+          <div id="module-page-content"></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- MODAL DIALOGS -->
+
+<div id="custom-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 2000; align-items: center; justify-content: center;">
+  <div style="background: #FFFFFF; width: 520px; max-width: 90%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); position: relative;">
+    <button onclick="closeModal()" style="position: absolute; right: 15px; top: 15px; background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 id="modal-title" style="margin-top: 0; color: #1E293B;">Modal Title</h3>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div id="pdf-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 3000; align-items: center; justify-content: center;">
+  <div style="background: #FFFFFF; width: 85%; height: 90%; border-radius: 12px; display: flex; flex-direction: column; overflow: hidden;">
+    <div style="padding: 15px 20px; background: #1E293B; color: #FFFFFF; display: flex; justify-content: space-between; align-items: center;">
+      <h3 style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-file-pdf"></i> Survey PDF Report Preview</h3>
+      <button onclick="closePDFModal()" style="background: none; border: none; color: #FFFFFF; font-size: 1.4rem; cursor: pointer;">&times;</button>
+    </div>
+    <iframe id="pdf-frame" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+  </div>
+</div>
+
+<!-- Universal Dynamic Entry Modal for Add & Edit across all modules -->
+<div id="universal-entry-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 2500; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
+  <div style="background: #FFFFFF; width: 620px; max-width: 92%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; margin: auto;">
+    <button onclick="closeUniversalEntryModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 id="universal-modal-title" style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-pen-to-square" style="color: var(--accent-blue);"></i> <span>Add New Entry</span>
+    </h3>
+    <p id="universal-modal-subtitle" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">Record details linked with Franchise, Responsible Person, Date/Time, Documents and Remarks.</p>
+
+    <form id="universal-entry-form" onsubmit="handleUniversalEntrySubmit(event)" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+      <input type="hidden" id="entry-module-key">
+      <input type="hidden" id="entry-id">
+
+      <!-- Auto-Extract dropzone inside entry modal -->
+      <div style="grid-column: span 2; background: #F1F5F9; border: 1px dashed #94A3B8; border-radius: 8px; padding: 10px 14px; text-align: center;">
+        <div style="font-size: 0.82rem; font-weight: 700; color: #1E293B; margin-bottom: 4px;">
+          <i class="fa-solid fa-wand-magic-sparkles" style="color: #2563EB;"></i> Auto-Extract Fields from Excel / PDF File
+        </div>
+        <input type="file" id="modal-auto-extract-file" accept=".xlsx,.xls,.csv,.pdf" onchange="autoExtractModalFile(this)" style="font-size: 0.8rem;">
+        <div id="modal-extract-status" style="margin-top: 4px; font-size: 0.78rem;"></div>
+      </div>
+
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Franchise Store <span style="color: red;">*</span></label>
+        <select id="entry-franchise-id" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <!-- Dynamically populated -->
+        </select>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Responsible Person <span style="color: red;">*</span></label>
+        <input type="text" id="entry-person" required placeholder="e.g. Rajesh Kumar" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Date <span style="color: red;">*</span></label>
+        <input type="date" id="entry-date" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <!-- Dynamic Field 1 -->
+      <div id="dynamic-field-1-container">
+        <label id="entry-field-1-label" style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Detail 1</label>
+        <input type="text" id="entry-field-1" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <!-- Dynamic Field 2 -->
+      <div id="dynamic-field-2-container">
+        <label id="entry-field-2-label" style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Detail 2</label>
+        <input type="text" id="entry-field-2" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <!-- Dynamic Field 3 (Numeric / Amount / Score) -->
+      <div id="dynamic-field-3-container">
+        <label id="entry-field-3-label" style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Amount / Value (Rs.)</label>
+        <input type="number" step="any" id="entry-field-3" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <!-- Status -->
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Status</label>
+        <select id="entry-status" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="Active">Active</option>
+          <option value="Completed">Completed</option>
+          <option value="Scheduled">Scheduled</option>
+          <option value="Pending">Pending</option>
+          <option value="Received">Received</option>
+          <option value="Approved">Approved</option>
+        </select>
+      </div>
+
+      <!-- File Attachment -->
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Upload Document / Photo / Invoice Attachment</label>
+        <input type="file" id="entry-document-file" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xlsx" style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px dashed #CBD5E1; font-size: 0.82rem; background: #F8FAFC;">
+        <div id="entry-document-preview" style="font-size: 0.78rem; color: #2563EB; margin-top: 4px;"></div>
+      </div>
+
+      <!-- Remarks -->
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Remarks & Additional Notes</label>
+        <textarea id="entry-remarks" rows="2" placeholder="Add remarks..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; font-family: inherit;"></textarea>
+      </div>
+
+      <div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" onclick="closeUniversalEntryModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: var(--accent-blue); color: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-floppy-disk"></i> Save Record Entry
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Batch Import & Field Mapping Modal -->
+<div id="batch-import-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 2800; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
+  <div style="background: #FFFFFF; width: 920px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto;">
+    <button onclick="closeBatchImportModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-file-import" style="color: #2563EB;"></i> <span id="batch-import-title">Auto-Import Excel / PDF Records</span>
+    </h3>
+    <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 15px;">Upload your file to extract rows automatically. Review, add, edit, or delete any record before non-destructive import into the system.</p>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background: #F8FAFC; padding: 15px; border-radius: 8px; border: 1px solid #E2E8F0; margin-bottom: 15px;">
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Target Franchise Store</label>
+        <select id="batch-import-franchise-id" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <!-- Populated dynamically -->
+        </select>
+      </div>
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Select File (.xlsx, .xls, .csv, .pdf)</label>
+        <input type="file" id="batch-import-file-input" accept=".xlsx,.xls,.csv,.pdf" onchange="handleBatchFileSelect(this)" style="width: 100%; padding: 6px; font-size: 0.82rem;">
+      </div>
+    </div>
+
+    <div id="batch-import-warning" style="display: none; margin-bottom: 12px; padding: 10px 14px; background: #FEF3C7; border: 1px solid #F59E0B; border-radius: 6px; color: #92400E; font-size: 0.85rem;"></div>
+
+    <div id="batch-extracted-preview" style="display: none; margin-bottom: 15px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <span style="font-weight: 700; font-size: 0.9rem; color: #1E293B;" id="batch-extracted-count">Extracted Records (0)</span>
+        <button type="button" onclick="addEmptyBatchRow()" style="padding: 4px 12px; font-size: 0.8rem; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-plus"></i> Add Manual Row
+        </button>
+      </div>
+      <div style="max-height: 300px; overflow-y: auto; border: 1px solid #E2E8F0; border-radius: 8px;">
+        <table class="data-table" style="width: 100%; font-size: 0.82rem;">
+          <thead>
+            <tr style="background: #F1F5F9;">
+              <th>Date</th>
+              <th>Person</th>
+              <th>Description / Purpose</th>
+              <th>Amount</th>
+              <th>Category / Details</th>
+              <th>Remarks</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="batch-preview-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+      <button type="button" onclick="closeBatchImportModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+      <button type="button" id="batch-confirm-btn" onclick="submitBatchImport()" disabled style="padding: 8px 22px; border-radius: 6px; border: none; background: #2563EB; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+        <i class="fa-solid fa-cloud-arrow-up"></i> Confirm & Import Records
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Import History Log Modal -->
+<div id="import-history-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 2900; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
+  <div style="background: #FFFFFF; width: 950px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto;">
+    <button onclick="closeImportHistoryModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-clock-rotate-left" style="color: #2563EB;"></i> <span>Universal Import & Version History Log</span>
+    </h3>
+    <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 15px;">Traceable log of all auto-imported Excel and PDF files, file hashes, linked documents, imported row counts, and version snapshots.</p>
+
+    <div style="max-height: 450px; overflow-y: auto; border: 1px solid #E2E8F0; border-radius: 8px;">
+      <table class="data-table" style="width: 100%; font-size: 0.83rem;">
+        <thead>
+          <tr style="background: #F1F5F9;">
+            <th>Imported At</th>
+            <th>Module</th>
+            <th>File Name</th>
+            <th>Records</th>
+            <th>Uploaded By</th>
+            <th>Linked Document</th>
+            <th>Status & Hash</th>
+          </tr>
+        </thead>
+        <tbody id="import-history-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

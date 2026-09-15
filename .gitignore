@@ -1,0 +1,21 @@
+# Environment variables & secrets (NEVER push to GitHub!)
+.env
+.env.local
+
+# Local SQLite Database & Local Uploads
+*.db
+*.sqlite3
+uploads/*
+!uploads/.gitkeep
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+env/
+venv/
+ENV/
+.venv/
+
+# Antigravity temporary files
+scratch/
