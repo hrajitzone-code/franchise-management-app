@@ -9,6 +9,7 @@ from pypdf import PdfReader
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, jsonify, send_file, Response, redirect
 from dotenv import load_dotenv
+from sqlalchemy.engine import make_url
 
 # Load environment variables from .env if present
 load_dotenv()
@@ -25,10 +26,30 @@ from services.storage_service import upload_file, get_file_url, is_supabase_conf
 app = Flask(__name__)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-db_url = os.environ.get('DATABASE_URL')
+def sanitize_db_url(raw_url):
+    if not raw_url or not isinstance(raw_url, str):
+        return None
+    url = raw_url.strip()
+    if not url:
+        return None
+    if url.startswith('postgres://'):
+        url = url.replace('postgres://', 'postgresql://', 1)
+    
+    parts = url.split('://', 1)
+    if len(parts) == 2:
+        scheme, rest = parts
+        rest = re.sub(r':(?=/|\?|$)', '', rest)
+        url = f"{scheme}://{rest}"
+
+    try:
+        make_url(url)
+        return url
+    except Exception as e:
+        print(f"DATABASE_URL validation failed ({e}), falling back to SQLite.")
+        return None
+
+db_url = sanitize_db_url(os.environ.get('DATABASE_URL'))
 if db_url:
-    if db_url.startswith('postgres://'):
-        db_url = db_url.replace('postgres://', 'postgresql://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'pool_pre_ping': True,
