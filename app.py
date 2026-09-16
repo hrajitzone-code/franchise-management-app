@@ -357,24 +357,49 @@ def initialize_database_lazily():
     if not _db_initialized:
         try:
             db.create_all()
+        except Exception as e:
+            db.session.rollback()
+            print(f"Lazy DB create_all warning: {e}")
+
+        try:
             seed_default_expense_categories()
+        except Exception as e:
+            db.session.rollback()
+
+        try:
             seed_initial_team_users()
+        except Exception as e:
+            db.session.rollback()
+
+        try:
             seed_initial_demo_data()
         except Exception as e:
-            print(f"Lazy DB initialization warning: {e}")
-        finally:
-            _db_initialized = True
+            db.session.rollback()
+
+        _db_initialized = True
 
 @app.errorhandler(500)
 def handle_500_error(e):
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
     import traceback
     tb = traceback.format_exc()
+    if request.path.startswith('/api/'):
+        return jsonify({'status': 'error', 'message': f'Internal Server Error: {str(e)}'}), 500
     return f"<h1>500 Internal Server Error</h1><pre>{tb}</pre>", 500
 
 @app.errorhandler(Exception)
 def handle_general_exception(e):
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
     import traceback
     tb = traceback.format_exc()
+    if request.path.startswith('/api/'):
+        return jsonify({'status': 'error', 'message': f'Unhandled Server Error: {str(e)}'}), 500
     return f"<h1>Unhandled Server Exception</h1><pre>{tb}</pre>", 500
 
 def log_audit(franchise_id, stage_name, action, performed_by, field_changed='-', old_value='-', new_value='-', remarks=''):
@@ -2123,34 +2148,51 @@ def get_signed_file_url():
 
 @app.route('/api/auth/login', methods=['POST'])
 def auth_login():
-    data = request.json or request.form
-    username = (data.get('username') or data.get('email') or '').strip()
-    password = (data.get('password') or '').strip()
+    try:
+        data = request.get_json(silent=True) or request.form or {}
+        username_raw = (data.get('username') or data.get('email') or '').strip()
+        password = (data.get('password') or '').strip()
 
-    if not username or not password:
-        return jsonify({'status': 'error', 'message': 'Username/Email and Password are required.'}), 400
+        if not username_raw or not password:
+            return jsonify({'status': 'error', 'message': 'Username/Email and Password are required.'}), 400
 
-    user = User.query.filter((User.username.ilike(username)) | (User.mobile == username)).first()
-    if not user or not user.check_password(password):
-        return jsonify({'status': 'error', 'message': 'Invalid username or password.'}), 401
+        username = username_raw.lower()
 
-    if not user.is_active:
-        return jsonify({'status': 'error', 'message': 'Your account is deactivated. Please contact Admin.'}), 403
+        # Flexible matching: exact username/email, or full_name, or mobile, or fallback domain
+        user = User.query.filter(
+            (db.func.lower(User.username) == username) |
+            (User.username.ilike(username)) |
+            (User.mobile == username_raw) |
+            (db.func.lower(User.full_name) == username)
+        ).first()
 
-    user.last_login = datetime.datetime.utcnow()
-    db.session.commit()
+        if not user and '@' not in username:
+            email_guess = f"{username}@franchise.com"
+            user = User.query.filter(db.func.lower(User.username) == email_guess).first()
 
-    session['user_id'] = user.id
-    session['username'] = user.username
-    session['role'] = user.role
+        if not user or not user.check_password(password):
+            return jsonify({'status': 'error', 'message': 'Invalid username or password.'}), 401
 
-    log_audit(user.franchise_id, 'User Auth', 'Login', user.full_name, remarks=f"User {user.username} logged in successfully.")
+        if not user.is_active:
+            return jsonify({'status': 'error', 'message': 'Your account is deactivated. Please contact Admin.'}), 403
 
-    return jsonify({
-        'status': 'success',
-        'message': 'Login successful!',
-        'user': user.to_dict()
-    })
+        user.last_login = datetime.datetime.utcnow()
+        db.session.commit()
+
+        session['user_id'] = user.id
+        session['username'] = user.username
+        session['role'] = user.role
+
+        log_audit(user.franchise_id, 'User Auth', 'Login', user.full_name, remarks=f"User {user.username} logged in successfully.")
+
+        return jsonify({
+            'status': 'success',
+            'message': 'Login successful!',
+            'user': user.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Server authentication error: {str(e)}'}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
 def auth_logout():

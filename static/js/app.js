@@ -2499,7 +2499,15 @@ async function handleLoginSubmit(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
-    const data = await res.json();
+    
+    let data;
+    const rawText = await res.text();
+    try {
+      data = JSON.parse(rawText);
+    } catch (parseErr) {
+      data = { status: 'error', message: 'Invalid response from server.' };
+    }
+
     if (res.ok && data.status === 'success') {
       checkAuthSession();
     } else {
@@ -2511,7 +2519,7 @@ async function handleLoginSubmit(e) {
   } catch (err) {
     console.error('Login error:', err);
     if (errorAlert) {
-      errorAlert.innerText = 'Server connection error. Please try again.';
+      errorAlert.innerText = 'Network error. Please check your connection and try again.';
       errorAlert.style.display = 'block';
     }
   } finally {
