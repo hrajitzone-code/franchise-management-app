@@ -2325,6 +2325,16 @@ def update_user(user_id):
     if 'permissions' in data and isinstance(data['permissions'], dict):
         u.permissions_json = json.dumps(data['permissions'])
 
+    if 'username' in data or 'email' in data:
+        new_username = str(data.get('username') or data.get('email')).strip().lower()
+        if new_username and new_username != u.username:
+            existing = User.query.filter(User.username == new_username, User.id != u.id).first()
+            if existing:
+                return jsonify({'status': 'error', 'message': f'Username/Email "{new_username}" is already taken by another user.'}), 400
+            old_username = u.username
+            u.username = new_username
+            log_audit(u.franchise_id, 'User Management', 'Change User ID', current_user.full_name, old_value=old_username, new_value=new_username, remarks=f"User ID changed from {old_username} to {new_username}")
+
     if 'password' in data and str(data['password']).strip():
         u.set_password(str(data['password']).strip())
         log_audit(u.franchise_id, 'User Management', 'Reset Password', current_user.full_name, new_value=f"User ID {u.id}", remarks=f"Password updated for {u.username}")
