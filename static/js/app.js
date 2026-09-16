@@ -2806,8 +2806,8 @@ function quickLogin(username, password) {
 
 async function handleLoginSubmit(e) {
   if (e) e.preventDefault();
-  const username = document.getElementById('login-username').value.trim();
-  const password = document.getElementById('login-password').value.trim();
+  const username = document.getElementById('login-username')?.value.trim();
+  const password = document.getElementById('login-password')?.value.trim();
   const errorAlert = document.getElementById('login-error-alert');
   const btn = document.getElementById('login-btn');
 
@@ -2820,7 +2820,10 @@ async function handleLoginSubmit(e) {
   }
 
   if (errorAlert) errorAlert.style.display = 'none';
-  if (btn) btn.disabled = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing In...';
+  }
 
   try {
     const res = await fetch('/api/auth/login', {
@@ -2838,7 +2841,36 @@ async function handleLoginSubmit(e) {
     }
 
     if (res.ok && data.status === 'success') {
-      checkAuthSession();
+      if (data.user) {
+        currentUser = data.user;
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app-container').style.display = 'flex';
+        
+        const nameEl = document.getElementById('current-user-fullname');
+        const roleEl = document.getElementById('current-role-badge');
+        if (nameEl) nameEl.innerText = currentUser.full_name;
+        if (roleEl) {
+          roleEl.innerText = currentUser.role;
+          if (currentUser.role === 'Super Admin') {
+            roleEl.style.background = '#FEF3C7';
+            roleEl.style.color = '#92400E';
+            roleEl.style.border = '1px solid #FCD34D';
+          } else {
+            roleEl.style.background = '#DBEAFE';
+            roleEl.style.color = '#1E40AF';
+            roleEl.style.border = '1px solid #93C5FD';
+          }
+        }
+
+        applyPermissionsToUI(currentUser);
+        restoreSidebarState();
+        initEventListeners();
+        loadDashboard();
+        loadExpenseCategories();
+        loadFranchisesList();
+      } else {
+        await checkAuthSession();
+      }
     } else {
       if (errorAlert) {
         errorAlert.innerText = data.message || 'Invalid username or password.';
@@ -2848,11 +2880,14 @@ async function handleLoginSubmit(e) {
   } catch (err) {
     console.error('Login error:', err);
     if (errorAlert) {
-      errorAlert.innerText = 'Network error. Please check your connection and try again.';
+      errorAlert.innerText = 'Network connection error. Please try again.';
       errorAlert.style.display = 'block';
     }
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Sign In to Account';
+    }
   }
 }
 
