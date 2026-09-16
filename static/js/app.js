@@ -325,6 +325,7 @@ function renderModulePage(pageId) {
     'performance': 'Performance Analytics',
     'reports': 'Reports & Exports Generator (PDF, Excel, Word)',
     'audit': 'System Audit History Log',
+    'users': 'User Management & Access Control',
     'permissions': 'User Roles & Access Control'
   };
 
@@ -335,6 +336,8 @@ function renderModulePage(pageId) {
     renderExpensesWorkspace(contentEl);
   } else if (pageId === 'visit_expenses') {
     renderVisitExpensesWorkspace(contentEl);
+  } else if (pageId === 'users' || pageId === 'permissions') {
+    renderUsersWorkspace(contentEl);
   } else if (pageId === 'reports') {
     contentEl.innerHTML = `
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 15px;">
@@ -1877,6 +1880,545 @@ async function deleteVisitExpenseEntry(id) {
     fetchFilteredVisitExpenses();
   } catch (err) {
     alert("Failed to delete record.");
+  }
+}
+
+// --- USER MANAGEMENT MODULE ---
+let allUsersList = [];
+let currentEditingUser = null;
+
+const ALL_MODULES = [
+  { key: 'leads', name: 'Leads & Assignments' },
+  { key: 'calling', name: 'Calling History' },
+  { key: 'followup', name: 'Follow-ups' },
+  { key: 'survey', name: 'Survey Reports' },
+  { key: 'visit', name: 'Site Visit & Expenses' },
+  { key: 'payments', name: 'Franchise Payments' },
+  { key: 'expenses', name: 'Expenses Management' },
+  { key: 'purchase', name: 'Purchase Log' },
+  { key: 'gr', name: 'Goods Return (GR)' },
+  { key: 'training', name: 'Staff Training' },
+  { key: 'interior', name: 'Interior & Store Setup' },
+  { key: 'marketing', name: 'Marketing Campaigns' },
+  { key: 'reports', name: 'Reports & Exports' },
+  { key: 'settings', name: 'Settings & Master Setup' },
+  { key: 'user_management', name: 'User Management' }
+];
+
+const DEFAULT_ROLE_PERMISSIONS = {
+  'Admin': { view: true, add: true, edit: true, delete: true, approve: true, export: true },
+  'Manager': { view: true, add: true, edit: true, delete: false, approve: true, export: true },
+  'Field Executive': {
+    leads: { view: true, add: true, edit: true, delete: false, approve: false, export: false },
+    calling: { view: true, add: true, edit: true, delete: false, approve: false, export: false },
+    followup: { view: true, add: true, edit: true, delete: false, approve: false, export: false },
+    survey: { view: true, add: true, edit: true, delete: false, approve: false, export: false },
+    visit: { view: true, add: true, edit: true, delete: false, approve: false, export: false },
+    training: { view: true, add: true, edit: true, delete: false, approve: false, export: false },
+    interior: { view: true, add: true, edit: true, delete: false, approve: false, export: false }
+  },
+  'Accountant': {
+    payments: { view: true, add: true, edit: true, delete: false, approve: true, export: true },
+    expenses: { view: true, add: true, edit: true, delete: false, approve: true, export: true },
+    purchase: { view: true, add: true, edit: true, delete: false, approve: true, export: true },
+    gr: { view: true, add: true, edit: true, delete: false, approve: true, export: true },
+    reports: { view: true, add: true, edit: true, delete: false, approve: true, export: true }
+  },
+  'Franchisee': {
+    survey: { view: true, add: true, edit: false, delete: false, approve: false, export: false },
+    payments: { view: true, add: true, edit: false, delete: false, approve: false, export: false },
+    expenses: { view: true, add: true, edit: false, delete: false, approve: false, export: false },
+    purchase: { view: true, add: true, edit: false, delete: false, approve: false, export: false },
+    gr: { view: true, add: true, edit: false, delete: false, approve: false, export: false },
+    training: { view: true, add: true, edit: false, delete: false, approve: false, export: false },
+    interior: { view: true, add: true, edit: false, delete: false, approve: false, export: false },
+    marketing: { view: true, add: true, edit: false, delete: false, approve: false, export: false }
+  }
+};
+
+function renderUsersWorkspace(container) {
+  container.innerHTML = `
+    <!-- Stat Pills Header -->
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4 style="font-size: 0.8rem; color: #64748B;">Total Users</h4>
+          <p id="users-stat-total" style="font-size: 1.4rem; font-weight: 700; color: #0F172A; margin: 4px 0 0 0;">0</p>
+        </div>
+        <div class="kpi-icon icon-blue"><i class="fa-solid fa-users"></i></div>
+      </div>
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4 style="font-size: 0.8rem; color: #64748B;">Active Users</h4>
+          <p id="users-stat-active" style="font-size: 1.4rem; font-weight: 700; color: #16A34A; margin: 4px 0 0 0;">0</p>
+        </div>
+        <div class="kpi-icon icon-green"><i class="fa-solid fa-user-check"></i></div>
+      </div>
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4 style="font-size: 0.8rem; color: #64748B;">Admins & Managers</h4>
+          <p id="users-stat-managers" style="font-size: 1.4rem; font-weight: 700; color: #2563EB; margin: 4px 0 0 0;">0</p>
+        </div>
+        <div class="kpi-icon icon-purple"><i class="fa-solid fa-user-gear"></i></div>
+      </div>
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4 style="font-size: 0.8rem; color: #64748B;">Field & Franchisees</h4>
+          <p id="users-stat-field" style="font-size: 1.4rem; font-weight: 700; color: #D97706; margin: 4px 0 0 0;">0</p>
+        </div>
+        <div class="kpi-icon icon-orange"><i class="fa-solid fa-store"></i></div>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div style="background: #F8FAFC; padding: 15px; border-radius: 10px; border: 1px solid #E2E8F0; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+      <input type="text" id="users-filter-search" oninput="debounce(loadUsers, 300)()" placeholder="Search name, email, mobile, department..." style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; width: 260px;">
+
+      <select id="users-filter-role" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        <option value="">All Roles</option>
+        <option value="Admin">Admin</option>
+        <option value="Manager">Manager</option>
+        <option value="Field Executive">Field Executive</option>
+        <option value="Accountant">Accountant</option>
+        <option value="Franchisee">Franchisee</option>
+      </select>
+
+      <select id="users-filter-status" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        <option value="">All Status</option>
+        <option value="active">Active Only</option>
+        <option value="inactive">Inactive Only</option>
+      </select>
+
+      <select id="users-filter-franchise" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        <option value="">All Franchises</option>
+        ${allFranchisesList.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+      </select>
+
+      <button class="btn-ref-explore" onclick="openNewUserModal()" style="width: auto; padding: 6px 16px; margin-left: auto; background: #2563EB;">
+        <i class="fa-solid fa-user-plus"></i> Create New User
+      </button>
+    </div>
+
+    <!-- Users Data Table -->
+    <div style="background: #FFFFFF; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <div style="overflow-x: auto;">
+        <table class="data-table" style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #F1F5F9; color: #475569; text-align: left;">
+              <th style="padding: 12px 15px;">User Info</th>
+              <th style="padding: 12px 15px;">Role</th>
+              <th style="padding: 12px 15px;">Assigned Franchise</th>
+              <th style="padding: 12px 15px;">Department</th>
+              <th style="padding: 12px 15px;">Status</th>
+              <th style="padding: 12px 15px;">Last Login</th>
+              <th style="padding: 12px 15px; text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="users-table-tbody">
+            <tr><td colspan="7" style="text-align: center; padding: 20px; color: #64748B;">Loading users list...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  loadUsers();
+}
+
+async function loadUsers() {
+  const search = document.getElementById('users-filter-search')?.value || '';
+  const role = document.getElementById('users-filter-role')?.value || '';
+  const status = document.getElementById('users-filter-status')?.value || '';
+  const franchise_id = document.getElementById('users-filter-franchise')?.value || '';
+
+  const queryParams = new URLSearchParams({ search, role, status, franchise_id });
+
+  try {
+    const res = await fetch(`/api/users?${queryParams.toString()}`);
+    if (res.status === 403) {
+      document.getElementById('users-table-tbody').innerHTML = `
+        <tr><td colspan="7" style="text-align: center; padding: 30px; color: #DC2626; font-weight: 600;">
+          <i class="fa-solid fa-lock" style="font-size: 1.5rem; display: block; margin-bottom: 8px;"></i>
+          Access Restricted: User Management section is accessible only to Admin users.
+        </td></tr>
+      `;
+      return;
+    }
+
+    const users = await res.json();
+    allUsersList = users;
+
+    // Update KPI pills
+    const total = users.length;
+    const active = users.filter(u => u.is_active).length;
+    const managers = users.filter(u => ['Admin', 'Manager'].includes(u.role)).length;
+    const field = users.filter(u => ['Field Executive', 'Franchisee'].includes(u.role)).length;
+
+    if (document.getElementById('users-stat-total')) document.getElementById('users-stat-total').innerText = total;
+    if (document.getElementById('users-stat-active')) document.getElementById('users-stat-active').innerText = active;
+    if (document.getElementById('users-stat-managers')) document.getElementById('users-stat-managers').innerText = managers;
+    if (document.getElementById('users-stat-field')) document.getElementById('users-stat-field').innerText = field;
+
+    renderUsersTable(users);
+  } catch (err) {
+    console.error('Error loading users:', err);
+  }
+}
+
+function renderUsersTable(users) {
+  const tbody = document.getElementById('users-table-tbody');
+  if (!tbody) return;
+
+  if (!users || users.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 25px; color: #64748B;">No users found matching current filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = users.map(u => {
+    const roleColors = {
+      'Admin': 'background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5;',
+      'Manager': 'background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD;',
+      'Field Executive': 'background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D;',
+      'Accountant': 'background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7;',
+      'Franchisee': 'background: #F3E8FF; color: #6B21A8; border: 1px solid #D8B4FE;'
+    };
+
+    const statusBadge = u.is_active
+      ? `<span style="background: #DCFCE7; color: #166534; padding: 3px 10px; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 4px;"></i> Active</span>`
+      : `<span style="background: #F3F4F6; color: #4B5563; padding: 3px 10px; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 4px;"></i> Inactive</span>`;
+
+    return `
+      <tr style="border-bottom: 1px solid #F1F5F9;">
+        <td style="padding: 12px 15px;">
+          <div style="font-weight: 600; color: #0F172A;">${u.full_name}</div>
+          <div style="font-size: 0.78rem; color: #64748B;"><i class="fa-regular fa-envelope"></i> ${u.username} ${u.mobile ? `| <i class="fa-solid fa-phone"></i> ${u.mobile}` : ''}</div>
+        </td>
+        <td style="padding: 12px 15px;">
+          <span style="padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; ${roleColors[u.role] || ''}">
+            ${u.role}
+          </span>
+        </td>
+        <td style="padding: 12px 15px; color: #334155;">
+          <i class="fa-solid fa-store text-muted"></i> ${u.franchise_name || 'All Franchises'}
+        </td>
+        <td style="padding: 12px 15px; color: #475569;">
+          ${u.department || '<span style="color: #94A3B8;">N/A</span>'}
+        </td>
+        <td style="padding: 12px 15px;">
+          ${statusBadge}
+        </td>
+        <td style="padding: 12px 15px; font-size: 0.8rem; color: #64748B;">
+          ${u.last_login || 'Never'}
+        </td>
+        <td style="padding: 12px 15px; text-align: right; white-space: nowrap;">
+          <button onclick="openEditUserModal(${u.id})" title="Edit User & Permissions" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; color: #2563EB; font-size: 0.8rem; margin-right: 4px;">
+            <i class="fa-solid fa-pen-to-square"></i> Edit
+          </button>
+          <button onclick="toggleUserStatus(${u.id}, ${u.is_active})" title="${u.is_active ? 'Deactivate Account' : 'Activate Account'}" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; color: ${u.is_active ? '#D97706' : '#16A34A'}; font-size: 0.8rem; margin-right: 4px;">
+            <i class="fa-solid ${u.is_active ? 'fa-user-slash' : 'fa-user-check'}"></i> ${u.is_active ? 'Deactivate' : 'Activate'}
+          </button>
+          <button onclick="openResetPasswordModal(${u.id}, '${u.full_name}')" title="Reset User Password" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; color: #D97706; font-size: 0.8rem; margin-right: 4px;">
+            <i class="fa-solid fa-key"></i> Password
+          </button>
+          <button onclick="deleteUser(${u.id}, '${u.full_name}')" title="Delete User Account" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #FCA5A5; background: #FEF2F2; cursor: pointer; color: #DC2626; font-size: 0.8rem;">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openNewUserModal() {
+  currentEditingUser = null;
+  document.getElementById('user-form-id').value = '';
+  document.getElementById('user-modal-title').innerText = 'Create New User';
+  document.getElementById('user-full-name').value = '';
+  document.getElementById('user-username').value = '';
+  document.getElementById('user-mobile').value = '';
+  document.getElementById('user-password').value = '';
+  document.getElementById('user-password').required = true;
+  document.getElementById('user-password-hint').innerText = '(Required for new user)';
+  document.getElementById('user-role').value = 'Manager';
+  document.getElementById('user-department').value = '';
+  document.getElementById('user-status').value = 'true';
+
+  populateFranchiseDropdownInUserModal('');
+  renderPermissionsMatrixTable('Manager', null);
+  switchUserModalTab('basic');
+
+  document.getElementById('user-modal').style.display = 'flex';
+}
+
+function openEditUserModal(userId) {
+  const user = allUsersList.find(u => u.id === userId);
+  if (!user) return;
+
+  currentEditingUser = user;
+  document.getElementById('user-form-id').value = user.id;
+  document.getElementById('user-modal-title').innerText = `Edit User: ${user.full_name}`;
+  document.getElementById('user-full-name').value = user.full_name;
+  document.getElementById('user-username').value = user.username;
+  document.getElementById('user-mobile').value = user.mobile || '';
+  document.getElementById('user-password').value = '';
+  document.getElementById('user-password').required = false;
+  document.getElementById('user-password-hint').innerText = '(Leave blank to keep unchanged)';
+  document.getElementById('user-role').value = user.role;
+  document.getElementById('user-department').value = user.department || '';
+  document.getElementById('user-status').value = user.is_active ? 'true' : 'false';
+
+  populateFranchiseDropdownInUserModal(user.franchise_id || '');
+  renderPermissionsMatrixTable(user.role, user.permissions);
+  switchUserModalTab('basic');
+
+  document.getElementById('user-modal').style.display = 'flex';
+}
+
+function populateFranchiseDropdownInUserModal(selectedId) {
+  const select = document.getElementById('user-franchise-id');
+  if (!select) return;
+
+  select.innerHTML = `<option value="">All Franchises (Unrestricted Access)</option>` +
+    allFranchisesList.map(f => `<option value="${f.id}" ${String(f.id) === String(selectedId) ? 'selected' : ''}>${f.name} (${f.code})</option>`).join('');
+}
+
+function switchUserModalTab(tabName) {
+  const basicBtn = document.getElementById('user-tab-basic');
+  const permsBtn = document.getElementById('user-tab-perms');
+  const basicContent = document.getElementById('user-tab-content-basic');
+  const permsContent = document.getElementById('user-tab-content-perms');
+
+  if (tabName === 'basic') {
+    basicBtn.style.color = '#2563EB';
+    basicBtn.style.borderBottom = '3px solid #2563EB';
+    permsBtn.style.color = '#64748B';
+    permsBtn.style.borderBottom = 'none';
+    basicContent.style.display = 'grid';
+    permsContent.style.display = 'none';
+  } else {
+    permsBtn.style.color = '#2563EB';
+    permsBtn.style.borderBottom = '3px solid #2563EB';
+    basicBtn.style.color = '#64748B';
+    basicBtn.style.borderBottom = 'none';
+    basicContent.style.display = 'none';
+    permsContent.style.display = 'flex';
+  }
+}
+
+function handleModalRoleChange(newRole) {
+  renderPermissionsMatrixTable(newRole, null);
+}
+
+function renderPermissionsMatrixTable(role, customPermissions) {
+  const tbody = document.getElementById('user-perms-tbody');
+  if (!tbody) return;
+
+  const actions = ['view', 'add', 'edit', 'delete', 'approve', 'export'];
+
+  tbody.innerHTML = ALL_MODULES.map(mod => {
+    let modPerms = {};
+    if (customPermissions && customPermissions[mod.key]) {
+      modPerms = customPermissions[mod.key];
+    } else {
+      // Get role defaults
+      if (role === 'Admin') {
+        actions.forEach(a => modPerms[a] = true);
+      } else if (role === 'Manager') {
+        actions.forEach(a => modPerms[a] = (a !== 'delete'));
+      } else {
+        const roleDefs = DEFAULT_ROLE_PERMISSIONS[role] || {};
+        const modDefs = roleDefs[mod.key] || { view: false, add: false, edit: false, delete: false, approve: false, export: false };
+        actions.forEach(a => modPerms[a] = !!modDefs[a]);
+      }
+    }
+
+    const checkboxesHtml = actions.map(action => `
+      <td style="text-align: center; padding: 8px;">
+        <input type="checkbox" id="perm_${mod.key}_${action}" data-module="${mod.key}" data-action="${action}" ${modPerms[action] ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;">
+      </td>
+    `).join('');
+
+    return `
+      <tr style="border-bottom: 1px solid #F1F5F9;">
+        <td style="padding: 8px 12px; font-weight: 600; color: #1E293B;">${mod.name}</td>
+        ${checkboxesHtml}
+      </tr>
+    `;
+  }).join('');
+}
+
+function grantAllModalPermissions(state) {
+  ALL_MODULES.forEach(mod => {
+    ['view', 'add', 'edit', 'delete', 'approve', 'export'].forEach(action => {
+      const cb = document.getElementById(`perm_${mod.key}_${action}`);
+      if (cb) cb.checked = state;
+    });
+  });
+}
+
+function resetModalRolePermissions() {
+  const role = document.getElementById('user-role')?.value || 'Manager';
+  renderPermissionsMatrixTable(role, null);
+}
+
+function extractPermissionsFromMatrix() {
+  const perms = {};
+  ALL_MODULES.forEach(mod => {
+    perms[mod.key] = {};
+    ['view', 'add', 'edit', 'delete', 'approve', 'export'].forEach(action => {
+      const cb = document.getElementById(`perm_${mod.key}_${action}`);
+      perms[mod.key][action] = cb ? cb.checked : false;
+    });
+  });
+  return perms;
+}
+
+async function saveUser(e) {
+  e.preventDefault();
+
+  const userId = document.getElementById('user-form-id').value;
+  const full_name = document.getElementById('user-full-name').value.trim();
+  const username = document.getElementById('user-username').value.trim();
+  const mobile = document.getElementById('user-mobile').value.trim();
+  const password = document.getElementById('user-password').value.trim();
+  const role = document.getElementById('user-role').value;
+  const franchise_id = document.getElementById('user-franchise-id').value;
+  const department = document.getElementById('user-department').value.trim();
+  const is_active = document.getElementById('user-status').value === 'true';
+  const permissions = extractPermissionsFromMatrix();
+
+  const payload = {
+    full_name,
+    username,
+    mobile,
+    role,
+    franchise_id: franchise_id ? parseInt(franchise_id) : null,
+    department,
+    is_active,
+    permissions
+  };
+
+  if (password) {
+    payload.password = password;
+  }
+
+  try {
+    const url = userId ? `/api/users/${userId}` : '/api/users';
+    const method = userId ? 'PUT' : 'POST';
+
+    const res = await fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await res.json();
+    if (res.ok && result.status === 'success') {
+      alert(result.message || 'User saved successfully!');
+      closeUserModal();
+      loadUsers();
+    } else {
+      alert(`Error: ${result.message || result.error || 'Failed to save user.'}`);
+    }
+  } catch (err) {
+    console.error('Error saving user:', err);
+    alert('An unexpected error occurred while saving user.');
+  }
+}
+
+function closeUserModal() {
+  document.getElementById('user-modal').style.display = 'none';
+}
+
+async function toggleUserStatus(userId, currentStatus) {
+  const user = allUsersList.find(u => u.id === userId);
+  const actionText = currentStatus ? 'deactivate' : 'activate';
+
+  if (!confirm(`Are you sure you want to ${actionText} user "${user ? user.full_name : 'ID ' + userId}"?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/users/${userId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_active: !currentStatus })
+    });
+    const result = await res.json();
+    if (res.ok && result.status === 'success') {
+      loadUsers();
+    } else {
+      alert(`Error: ${result.message || result.error || 'Failed to update user status.'}`);
+    }
+  } catch (err) {
+    console.error('Error toggling user status:', err);
+  }
+}
+
+function openResetPasswordModal(userId, userName) {
+  document.getElementById('reset-pass-user-id').value = userId;
+  document.getElementById('reset-pass-user-label').innerText = `Resetting password for: ${userName}`;
+  document.getElementById('reset-new-password').value = '';
+  document.getElementById('reset-confirm-password').value = '';
+  document.getElementById('reset-password-modal').style.display = 'flex';
+}
+
+function closeResetPasswordModal() {
+  document.getElementById('reset-password-modal').style.display = 'none';
+}
+
+async function submitResetPassword(e) {
+  e.preventDefault();
+
+  const userId = document.getElementById('reset-pass-user-id').value;
+  const newPass = document.getElementById('reset-new-password').value.trim();
+  const confirmPass = document.getElementById('reset-confirm-password').value.trim();
+
+  if (!newPass) {
+    alert('Please enter a new password.');
+    return;
+  }
+  if (newPass !== confirmPass) {
+    alert('New password and confirm password do not match.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/users/${userId}/reset_password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: newPass })
+    });
+    const result = await res.json();
+    if (res.ok && result.status === 'success') {
+      alert(result.message || 'Password reset successfully!');
+      closeResetPasswordModal();
+    } else {
+      alert(`Error: ${result.message || result.error || 'Failed to reset password.'}`);
+    }
+  } catch (err) {
+    console.error('Error resetting password:', err);
+  }
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Are you sure you want to permanently delete user "${userName}"? This action cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/users/${userId}`, {
+      method: 'DELETE'
+    });
+    const result = await res.json();
+    if (res.ok && result.status === 'success') {
+      alert(result.message || 'User deleted successfully.');
+      loadUsers();
+    } else {
+      alert(`Error: ${result.message || result.error || 'Failed to delete user.'}`);
+    }
+  } catch (err) {
+    console.error('Error deleting user:', err);
   }
 }
 

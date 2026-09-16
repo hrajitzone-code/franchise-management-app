@@ -7,7 +7,8 @@ import csv
 import openpyxl
 from pypdf import PdfReader
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, request, jsonify, send_file, Response, redirect
+from functools import wraps
+from flask import Flask, render_template, request, jsonify, send_file, Response, redirect, session
 from dotenv import load_dotenv
 from sqlalchemy.engine import make_url
 
@@ -18,12 +19,13 @@ from models import (
     db, Franchise, Lead, CallHistory, FollowUp, TokenRecord, SurveyVersion, Payment,
     BrandingSetup, MarketingCampaign, TrainingRecord, StoreOperations, MaterialAsset,
     Purchase, GRReturn, ExpenseCategory, Expense, CompanySupport, Document, AuditLog,
-    ImportHistory, VisitExpense
+    ImportHistory, VisitExpense, User
 )
 from services.report_service import generate_pdf_report, generate_excel_report, generate_word_report
 from services.storage_service import upload_file, get_file_url, is_supabase_configured
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'franchise_management_app_secret_key_2026')
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 def sanitize_db_url(raw_url):
@@ -285,6 +287,61 @@ def seed_initial_demo_data():
 
     db.session.commit()
 
+def seed_default_admin_user():
+    if not User.query.first():
+        admin_email = os.environ.get('DEFAULT_ADMIN_USER', 'admin@franchise.com')
+        admin_pass = os.environ.get('DEFAULT_ADMIN_PASS', 'Admin@123456')
+        admin_user = User(
+            full_name="System Admin",
+            username=admin_email,
+            mobile="9999999999",
+            role="Admin",
+            department="Management",
+            is_active=True
+        )
+        admin_user.set_password(admin_pass)
+        db.session.add(admin_user)
+        db.session.commit()
+
+def get_current_user():
+    user_id = session.get('user_id')
+    if user_id:
+        u = User.query.get(user_id)
+        if u and u.is_active:
+            return u
+    return None
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        u = get_current_user()
+        if not u:
+            if request.path.startswith('/api/'):
+                return jsonify({'error': 'Unauthorized access. Please login.'}), 401
+            return redirect('/')
+        return f(*args, **kwargs)
+    return decorated_function
+
+def permission_required(module, action):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            u = get_current_user()
+            if not u:
+                return jsonify({'error': 'Unauthorized access. Please login.'}), 401
+            if not u.has_permission(module, action):
+                return jsonify({'error': f'Permission denied for {action} in {module}.'}), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+def scope_query_by_user(query, model):
+    user = get_current_user()
+    if user and user.role != 'Admin' and user.franchise_id:
+        if hasattr(model, 'franchise_id'):
+            return query.filter(model.franchise_id == user.franchise_id)
+    return query
+
 _db_initialized = False
 
 @app.before_request
@@ -294,6 +351,7 @@ def initialize_database_lazily():
         try:
             db.create_all()
             seed_default_expense_categories()
+            seed_default_admin_user()
             seed_initial_demo_data()
         except Exception as e:
             print(f"Lazy DB initialization warning: {e}")
@@ -2053,6 +2111,236 @@ def get_signed_file_url():
     path = request.args.get('path', '')
     url = get_file_url(path)
     return jsonify({'url': url})
+
+# --- AUTH & USER MANAGEMENT APIs ---
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    data = request.json or request.form
+    username = (data.get('username') or data.get('email') or '').strip()
+    password = (data.get('password') or '').strip()
+
+    if not username or not password:
+        return jsonify({'status': 'error', 'message': 'Username/Email and Password are required.'}), 400
+
+    user = User.query.filter((User.username.ilike(username)) | (User.mobile == username)).first()
+    if not user or not user.check_password(password):
+        return jsonify({'status': 'error', 'message': 'Invalid username or password.'}), 401
+
+    if not user.is_active:
+        return jsonify({'status': 'error', 'message': 'Your account is deactivated. Please contact Admin.'}), 403
+
+    user.last_login = datetime.datetime.utcnow()
+    db.session.commit()
+
+    session['user_id'] = user.id
+    session['username'] = user.username
+    session['role'] = user.role
+
+    log_audit(user.franchise_id, 'User Auth', 'Login', user.full_name, remarks=f"User {user.username} logged in successfully.")
+
+    return jsonify({
+        'status': 'success',
+        'message': 'Login successful!',
+        'user': user.to_dict()
+    })
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    user = get_current_user()
+    if user:
+        log_audit(user.franchise_id, 'User Auth', 'Logout', user.full_name, remarks=f"User {user.username} logged out.")
+    session.clear()
+    return jsonify({'status': 'success', 'message': 'Logged out successfully.'})
+
+@app.route('/api/auth/me', methods=['GET'])
+def auth_me():
+    user = get_current_user()
+    if not user:
+        return jsonify({'authenticated': False}), 200
+    return jsonify({
+        'authenticated': True,
+        'user': user.to_dict()
+    })
+
+@app.route('/api/users', methods=['GET'])
+def get_users():
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Admin':
+        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+
+    search_q = request.args.get('search', '').strip().lower()
+    role_filter = request.args.get('role', '').strip()
+    status_filter = request.args.get('status', '').strip()
+    department_filter = request.args.get('department', '').strip()
+    franchise_filter = request.args.get('franchise_id', '').strip()
+
+    query = User.query
+    if search_q:
+        query = query.filter(
+            (User.full_name.ilike(f"%{search_q}%")) |
+            (User.username.ilike(f"%{search_q}%")) |
+            (User.mobile.ilike(f"%{search_q}%")) |
+            (User.department.ilike(f"%{search_q}%"))
+        )
+    if role_filter:
+        query = query.filter(User.role == role_filter)
+    if status_filter:
+        is_act = True if status_filter.lower() == 'active' else False
+        query = query.filter(User.is_active == is_act)
+    if department_filter:
+        query = query.filter(User.department == department_filter)
+    if franchise_filter:
+        query = query.filter(User.franchise_id == franchise_filter)
+
+    users = query.order_by(User.created_at.desc()).all()
+    return jsonify([u.to_dict() for u in users])
+
+@app.route('/api/users', methods=['POST'])
+def create_user():
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Admin':
+        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+
+    data = request.json or request.form
+    full_name = (data.get('full_name') or '').strip()
+    username = (data.get('username') or data.get('email') or '').strip().lower()
+    mobile = (data.get('mobile') or '').strip()
+    password = (data.get('password') or '').strip()
+    role = (data.get('role') or 'Manager').strip()
+    franchise_id = data.get('franchise_id')
+    department = (data.get('department') or '').strip()
+    is_active = True if str(data.get('is_active', 'true')).lower() in ['true', '1'] else False
+    permissions_data = data.get('permissions')
+
+    if not full_name or not username or not password:
+        return jsonify({'status': 'error', 'message': 'Full Name, Username/Email, and Password are required.'}), 400
+
+    existing = User.query.filter_by(username=username).first()
+    if existing:
+        return jsonify({'status': 'error', 'message': f'User with email/username "{username}" already exists.'}), 400
+
+    new_user = User(
+        full_name=full_name,
+        username=username,
+        mobile=mobile,
+        role=role,
+        franchise_id=int(franchise_id) if franchise_id and str(franchise_id).isdigit() else None,
+        department=department,
+        is_active=is_active,
+        permissions_json=json.dumps(permissions_data) if isinstance(permissions_data, dict) else None
+    )
+    new_user.set_password(password)
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    log_audit(new_user.franchise_id, 'User Management', 'Create User', current_user.full_name, new_value=f"{new_user.full_name} ({new_user.role})", remarks=f"User {new_user.username} created.")
+
+    return jsonify({
+        'status': 'success',
+        'message': 'User created successfully!',
+        'user': new_user.to_dict()
+    })
+
+@app.route('/api/users/<int:user_id>', methods=['PUT'])
+def update_user(user_id):
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Admin':
+        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+
+    u = User.query.get_or_404(user_id)
+    data = request.json or request.form
+
+    if 'full_name' in data: u.full_name = str(data['full_name']).strip()
+    if 'mobile' in data: u.mobile = str(data['mobile']).strip()
+    if 'role' in data: u.role = str(data['role']).strip()
+    if 'department' in data: u.department = str(data['department']).strip()
+    if 'franchise_id' in data:
+        fid = data['franchise_id']
+        u.franchise_id = int(fid) if fid and str(fid).isdigit() else None
+    if 'is_active' in data:
+        u.is_active = True if str(data['is_active']).lower() in ['true', '1'] else False
+    if 'permissions' in data and isinstance(data['permissions'], dict):
+        u.permissions_json = json.dumps(data['permissions'])
+
+    if 'password' in data and str(data['password']).strip():
+        u.set_password(str(data['password']).strip())
+        log_audit(u.franchise_id, 'User Management', 'Reset Password', current_user.full_name, new_value=f"User ID {u.id}", remarks=f"Password updated for {u.username}")
+
+    db.session.commit()
+    log_audit(u.franchise_id, 'User Management', 'Update User', current_user.full_name, new_value=f"{u.full_name} ({u.role})", remarks=f"User details updated for {u.username}")
+
+    return jsonify({
+        'status': 'success',
+        'message': 'User updated successfully!',
+        'user': u.to_dict()
+    })
+
+@app.route('/api/users/<int:user_id>/status', methods=['PUT'])
+def toggle_user_status(user_id):
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Admin':
+        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+
+    u = User.query.get_or_404(user_id)
+    if u.id == current_user.id:
+        return jsonify({'status': 'error', 'message': 'You cannot deactivate your own admin account.'}), 400
+
+    data = request.json or {}
+    if 'is_active' in data:
+        u.is_active = bool(data['is_active'])
+    else:
+        u.is_active = not u.is_active
+
+    db.session.commit()
+    action = 'Activate' if u.is_active else 'Deactivate'
+    log_audit(u.franchise_id, 'User Management', f'{action} User', current_user.full_name, new_value=f"Status: {u.is_active}", remarks=f"User {u.username} status set to {u.is_active}")
+
+    return jsonify({
+        'status': 'success',
+        'message': f"User {u.full_name} {'activated' if u.is_active else 'deactivated'} successfully!",
+        'user': u.to_dict()
+    })
+
+@app.route('/api/users/<int:user_id>/reset_password', methods=['POST'])
+def reset_user_password(user_id):
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Admin':
+        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+
+    u = User.query.get_or_404(user_id)
+    data = request.json or request.form
+    new_pass = (data.get('new_password') or data.get('password') or '').strip()
+
+    if not new_pass:
+        return jsonify({'status': 'error', 'message': 'New password is required.'}), 400
+
+    u.set_password(new_pass)
+    db.session.commit()
+    log_audit(u.franchise_id, 'User Management', 'Reset Password', current_user.full_name, new_value=f"User ID {u.id}", remarks=f"Admin reset password for {u.username}")
+
+    return jsonify({'status': 'success', 'message': f'Password for {u.full_name} reset successfully!'})
+
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+def delete_user(user_id):
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Admin':
+        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+
+    u = User.query.get_or_404(user_id)
+    if u.id == current_user.id:
+        return jsonify({'status': 'error', 'message': 'You cannot delete your own admin account.'}), 400
+
+    username = u.username
+    full_name = u.full_name
+    fid = u.franchise_id
+
+    db.session.delete(u)
+    db.session.commit()
+    log_audit(fid, 'User Management', 'Delete User', current_user.full_name, old_value=f"{full_name} ({username})", remarks=f"User {username} deleted.")
+
+    return jsonify({'status': 'success', 'message': f'User {full_name} deleted successfully!'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050, debug=True)

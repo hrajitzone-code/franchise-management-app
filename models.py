@@ -1,4 +1,6 @@
 import datetime
+import json
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -680,6 +682,102 @@ class VisitExpense(db.Model):
             'paid_by': self.paid_by,
             'document_path': self.document_path or '',
             'remarks': self.remarks or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
+class User(db.Model):
+    __tablename__ = 'users'
+    id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(150), nullable=False)
+    username = db.Column(db.String(120), unique=True, nullable=False) # Email / Username
+    mobile = db.Column(db.String(20), nullable=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(50), nullable=False, default='Manager') # Admin, Manager, Field Executive, Accountant, Franchisee
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    department = db.Column(db.String(100), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    last_login = db.Column(db.DateTime, nullable=True)
+    permissions_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    franchise = db.relationship('Franchise', backref=db.backref('assigned_users', lazy=True))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def get_permissions(self):
+        if self.permissions_json:
+            try:
+                return json.loads(self.permissions_json)
+            except Exception:
+                pass
+        return self.get_default_permissions(self.role)
+
+    @staticmethod
+    def get_default_permissions(role):
+        all_modules = [
+            'leads', 'calling', 'followup', 'survey', 'visit', 'payments', 
+            'expenses', 'purchase', 'gr', 'training', 'interior', 'marketing', 
+            'reports', 'settings', 'user_management'
+        ]
+        
+        if role == 'Admin':
+            return {
+                m: {'view': True, 'add': True, 'edit': True, 'delete': True, 'approve': True, 'export': True}
+                for m in all_modules
+            }
+        elif role == 'Manager':
+            return {
+                m: {'view': True, 'add': True, 'edit': True, 'delete': False, 'approve': True, 'export': True}
+                for m in all_modules
+            }
+        elif role == 'Field Executive':
+            fe_modules = ['leads', 'calling', 'followup', 'survey', 'visit', 'training', 'interior']
+            return {
+                m: {'view': m in fe_modules, 'add': m in fe_modules, 'edit': m in fe_modules, 'delete': False, 'approve': False, 'export': False}
+                for m in all_modules
+            }
+        elif role == 'Accountant':
+            acc_modules = ['payments', 'expenses', 'purchase', 'gr', 'reports']
+            return {
+                m: {'view': m in acc_modules, 'add': m in acc_modules, 'edit': m in acc_modules, 'delete': False, 'approve': True, 'export': True}
+                for m in all_modules
+            }
+        elif role == 'Franchisee':
+            fr_modules = ['survey', 'payments', 'expenses', 'purchase', 'gr', 'training', 'interior', 'marketing']
+            return {
+                m: {'view': m in fr_modules, 'add': m in fr_modules, 'edit': False, 'delete': False, 'approve': False, 'export': False}
+                for m in all_modules
+            }
+        return {
+            m: {'view': True, 'add': False, 'edit': False, 'delete': False, 'approve': False, 'export': False}
+            for m in all_modules
+        }
+
+    def has_permission(self, module, action):
+        if self.role == 'Admin':
+            return True
+        perms = self.get_permissions()
+        mod_perms = perms.get(module, {})
+        return bool(mod_perms.get(action, False))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'full_name': self.full_name,
+            'username': self.username,
+            'mobile': self.mobile or '',
+            'role': self.role,
+            'franchise_id': self.franchise_id,
+            'franchise_name': self.franchise.name if self.franchise else 'All Franchises',
+            'department': self.department or '',
+            'is_active': self.is_active,
+            'last_login': self.last_login.strftime('%Y-%m-%d %H:%M:%S') if self.last_login else 'Never',
+            'permissions': self.get_permissions(),
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
 

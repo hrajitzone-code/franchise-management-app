@@ -177,6 +177,7 @@
           <i class="fa-solid fa-chevron-down category-arrow"></i>
         </div>
         <ul class="submenu">
+          <li id="nav-users"><a href="javascript:void(0)" onclick="switchPage('users')"><i class="fa-solid fa-users-gear"></i> <span class="nav-text">User Management</span></a></li>
           <li><a href="javascript:void(0)" onclick="openExpenseCategoryModal()"><i class="fa-solid fa-tags"></i> <span class="nav-text">Expense Categories Master</span></a></li>
         </ul>
       </div>
@@ -631,6 +632,157 @@
   </div>
 </div>
 
+  </div>
+</div>
+
+<!-- User Create/Edit Modal with Permission Matrix Tab -->
+<div id="user-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 3000; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
+  <div style="background: #FFFFFF; width: 980px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto; max-height: 90vh; display: flex; flex-direction: column;">
+    <button onclick="closeUserModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-user-shield" style="color: #2563EB;"></i> <span id="user-modal-title">Create New User</span>
+    </h3>
+
+    <!-- Tabs Navigation -->
+    <div style="display: flex; gap: 10px; border-bottom: 2px solid #E2E8F0; margin-bottom: 15px;">
+      <button type="button" id="user-tab-basic" onclick="switchUserModalTab('basic')" style="padding: 8px 18px; border: none; background: none; font-weight: 600; font-size: 0.88rem; cursor: pointer; color: #2563EB; border-bottom: 3px solid #2563EB;">
+        <i class="fa-solid fa-address-card"></i> Basic Information
+      </button>
+      <button type="button" id="user-tab-perms" onclick="switchUserModalTab('perms')" style="padding: 8px 18px; border: none; background: none; font-weight: 600; font-size: 0.88rem; cursor: pointer; color: #64748B;">
+        <i class="fa-solid fa-sliders"></i> Permissions Matrix
+      </button>
+    </div>
+
+    <form id="user-form" onsubmit="saveUser(event)" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+      <input type="hidden" id="user-form-id" value="">
+
+      <!-- Tab 1: Basic Information -->
+      <div id="user-tab-content-basic" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; overflow-y: auto; padding-right: 5px; max-height: 60vh;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Full Name *</label>
+          <input type="text" id="user-full-name" required placeholder="e.g. Ramesh Sharma" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Username / Email *</label>
+          <input type="email" id="user-username" required placeholder="e.g. ramesh@franchise.com" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Mobile Number</label>
+          <input type="tel" id="user-mobile" placeholder="e.g. 9876543210" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Role *</label>
+          <select id="user-role" onchange="handleModalRoleChange(this.value)" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+            <option value="Admin">Admin (Full Control)</option>
+            <option value="Manager" selected>Manager</option>
+            <option value="Field Executive">Field Executive</option>
+            <option value="Accountant">Accountant</option>
+            <option value="Franchisee">Franchisee</option>
+          </select>
+        </div>
+
+        <div id="user-password-container">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Password * <span id="user-password-hint" style="font-size: 0.75rem; font-weight: normal; color: #64748B;">(Required for new user)</span></label>
+          <input type="password" id="user-password" placeholder="Enter secure password" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Assigned Franchise (Optional Scope)</label>
+          <select id="user-franchise-id" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+            <option value="">All Franchises (Unrestricted Access)</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Department</label>
+          <input type="text" id="user-department" placeholder="e.g. Sales, Accounts, Field Operations" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Account Status</label>
+          <select id="user-status" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+            <option value="true" selected>Active</option>
+            <option value="false">Inactive / Deactivated</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tab 2: Permissions Matrix -->
+      <div id="user-tab-content-perms" style="display: none; flex-direction: column; overflow-y: auto; max-height: 60vh;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: #F8FAFC; padding: 10px; border-radius: 6px;">
+          <span style="font-size: 0.82rem; color: #475569;"><i class="fa-solid fa-circle-info" style="color:#2563EB;"></i> Customize granular permissions for 15 modules. Roles auto-preset standard permissions.</span>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" onclick="grantAllModalPermissions(true)" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer;">
+              Select All
+            </button>
+            <button type="button" onclick="resetModalRolePermissions()" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer;">
+              Reset Role Defaults
+            </button>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 8px;">
+          <table class="data-table" style="width: 100%; font-size: 0.82rem;">
+            <thead>
+              <tr style="background: #F1F5F9;">
+                <th style="width: 28%;">Module Name</th>
+                <th style="text-align: center;">View</th>
+                <th style="text-align: center;">Add</th>
+                <th style="text-align: center;">Edit</th>
+                <th style="text-align: center;">Delete</th>
+                <th style="text-align: center;">Approve</th>
+                <th style="text-align: center;">Export</th>
+              </tr>
+            </thead>
+            <tbody id="user-perms-tbody">
+              <!-- Populated dynamically by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; padding-top: 10px; border-top: 1px solid #E2E8F0;">
+        <button type="button" onclick="closeUserModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #2563EB; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-floppy-disk"></i> Save User
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div id="reset-password-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 3100; align-items: center; justify-content: center;">
+  <div style="background: #FFFFFF; width: 450px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto;">
+    <button onclick="closeResetPasswordModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-key" style="color: #D97706;"></i> <span>Reset User Password</span>
+    </h3>
+    <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 15px;" id="reset-pass-user-label">Resetting password for user</p>
+
+    <form onsubmit="submitResetPassword(event)">
+      <input type="hidden" id="reset-pass-user-id" value="">
+
+      <div style="margin-bottom: 14px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">New Password *</label>
+        <input type="password" id="reset-new-password" required placeholder="Enter new password" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div style="margin-bottom: 18px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Confirm New Password *</label>
+        <input type="password" id="reset-confirm-password" required placeholder="Re-enter new password" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" onclick="closeResetPasswordModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #D97706; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-check"></i> Update Password
+        </button>
+      </div>
+    </form>
   </div>
 </div>
 
