@@ -89,7 +89,7 @@ def switch_to_sqlite():
         db.create_all()
         seed_default_expense_categories()
         seed_initial_team_users()
-        seed_initial_demo_data()
+        remove_demo_temporary_data()
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -121,188 +121,35 @@ def seed_default_expense_categories():
             db.session.add(ExpenseCategory(name=name, description=desc, is_active=True))
     db.session.commit()
 
-def seed_initial_demo_data():
-    if Franchise.query.first():
-        return  # Data already exists
-
-    f1 = Franchise(
-        code="FR-1001",
-        name="Ajit Zone Mumbai Hub",
-        owner_name="Rajesh Sharma",
-        owner_mobile="9876543210",
-        owner_email="rajesh.mumbai@example.com",
-        city="Mumbai",
-        state="Maharashtra",
-        assigned_person="Priya Sharma",
-        status="Active",
-        plan_name="Premium Plan",
-        agreed_amount=500000.0
-    )
-    f2 = Franchise(
-        code="FR-1002",
-        name="Ajit Zone Delhi Store",
-        owner_name="Suresh Verma",
-        owner_mobile="9811223344",
-        owner_email="suresh.delhi@example.com",
-        city="Delhi",
-        state="Delhi",
-        assigned_person="Rahul Verma",
-        status="Active",
-        plan_name="Standard Plan",
-        agreed_amount=350000.0
-    )
-    f3 = Franchise(
-        code="FR-1003",
-        name="Ajit Zone Pune Center",
-        owner_name="Amit Patel",
-        owner_mobile="9898001122",
-        owner_email="amit.pune@example.com",
-        city="Pune",
-        state="Maharashtra",
-        assigned_person="Priya Sharma",
-        status="Agreement",
-        plan_name="Gold Plan",
-        agreed_amount=450000.0
-    )
-    db.session.add_all([f1, f2, f3])
-    db.session.commit()
-
-    l1 = Lead(
-        franchise_id=f1.id,
-        customer_name="Vikas Malhotra",
-        mobile="9988776655",
-        email="vikas@example.com",
-        city="Mumbai",
-        source="Direct Call",
-        status="Interested",
-        assigned_person="Priya Sharma",
-        remarks="Interested in second store opening in Thane."
-    )
-    l2 = Lead(
-        franchise_id=f2.id,
-        customer_name="Deepak Joshi",
-        mobile="9877112233",
-        email="deepak@example.com",
-        city="Delhi",
-        source="Website",
-        status="New Lead",
-        assigned_person="Rahul Verma",
-        remarks="Requested phone call for Standard Plan information."
-    )
-    db.session.add_all([l1, l2])
-
-    p1 = Payment(
-        franchise_id=f1.id,
-        amount=250000.0,
-        payment_date="2026-09-01",
-        payment_mode="Bank Transfer",
-        reference_no="TXN-998811",
-        status="Received",
-        remarks="Initial Franchise Fee Part 1"
-    )
-    p2 = Payment(
-        franchise_id=f2.id,
-        amount=150000.0,
-        payment_date="2026-09-05",
-        payment_mode="UPI",
-        reference_no="UPI-887722",
-        status="Received",
-        remarks="Token Advance Payment"
-    )
-    db.session.add_all([p1, p2])
-
-    pur1 = Purchase(
-        franchise_id=f1.id,
-        purchase_date="2026-09-03",
-        vendor_name="Apex Retail Supplies",
-        item_description="Store Display Racks & Branding Material",
-        amount=75000.0,
-        payment_status="Paid",
-        reference_no="PO-8801",
-        remarks="Store setup material delivered"
-    )
-    pur2 = Purchase(
-        franchise_id=f2.id,
-        purchase_date="2026-09-06",
-        vendor_name="TechMatrix Systems",
-        item_description="Billing POS Counter & Scanners",
-        amount=45000.0,
-        payment_status="Paid",
-        reference_no="PO-8802",
-        remarks="POS Hardware delivered"
-    )
-    db.session.add_all([pur1, pur2])
-
-    gr1 = GRReturn(
-        franchise_id=f1.id,
-        return_date="2026-09-08",
-        vendor_name="Apex Retail Supplies",
-        item_description="Damaged Acrylic Display Board",
-        return_amount=5000.0,
-        reason="Transit Damage",
-        reference_no="GR-101",
-        remarks="Replacement dispatched by vendor"
-    )
-    db.session.add(gr1)
-
-    cat_rent = ExpenseCategory.query.filter_by(name="Rent & Lease").first()
-    cat_util = ExpenseCategory.query.filter_by(name="Utilities (Electricity/Water)").first()
-    
-    e1 = Expense(
-        franchise_id=f1.id,
-        category_id=cat_rent.id if cat_rent else 1,
-        amount=35000.0,
-        expense_date="2026-09-02",
-        payment_mode="Bank Transfer",
-        paid_by="Rajesh Sharma",
-        purpose="Monthly Store Premises Rent",
-        remarks="Paid via HDFC Net Banking"
-    )
-    e2 = Expense(
-        franchise_id=f2.id,
-        category_id=cat_util.id if cat_util else 2,
-        amount=12500.0,
-        expense_date="2026-09-07",
-        payment_mode="UPI",
-        paid_by="Suresh Verma",
-        purpose="Electricity & Power Backup Generator",
-        remarks="Paid via GPay"
-    )
-    db.session.add_all([e1, e2])
-
-    ve1 = VisitExpense(
-        franchise_id=f1.id,
-        visit_date="2026-09-04",
-        visit_location="Mumbai Store Premises",
-        visiting_person="Priya Sharma",
-        purpose="Site Survey & Branding Setup Inspection",
-        travel_expense=2500.0,
-        food_expense=800.0,
-        hotel_stay_expense=3500.0,
-        other_expense=500.0,
-        total_expense=7300.0,
-        payment_mode="Company Card",
-        paid_by="Company",
-        remarks="Store layout verified and approved"
-    )
-    ve2 = VisitExpense(
-        franchise_id=f2.id,
-        visit_date="2026-09-09",
-        visit_location="Delhi Store Launch",
-        visiting_person="Rahul Verma",
-        purpose="Staff Training & Grand Opening Visit",
-        travel_expense=4000.0,
-        food_expense=1200.0,
-        hotel_stay_expense=5000.0,
-        other_expense=1000.0,
-        total_expense=11200.0,
-        payment_mode="Reimbursement",
-        paid_by="Employee",
-        remarks="Staff training completed successfully"
-    )
-    db.session.add_all([ve1, ve2])
-
-    db.session.commit()
+def remove_demo_temporary_data():
+    try:
+        demo_codes = ["FR-1001", "FR-1002", "FR-1003"]
+        demo_franchises = Franchise.query.filter(Franchise.code.in_(demo_codes)).all()
+        for f in demo_franchises:
+            f_id = f.id
+            Lead.query.filter_by(franchise_id=f_id).delete()
+            CallHistory.query.filter_by(franchise_id=f_id).delete()
+            FollowUp.query.filter_by(franchise_id=f_id).delete()
+            TokenRecord.query.filter_by(franchise_id=f_id).delete()
+            SurveyVersion.query.filter_by(franchise_id=f_id).delete()
+            Payment.query.filter_by(franchise_id=f_id).delete()
+            BrandingSetup.query.filter_by(franchise_id=f_id).delete()
+            MarketingCampaign.query.filter_by(franchise_id=f_id).delete()
+            TrainingRecord.query.filter_by(franchise_id=f_id).delete()
+            StoreOperations.query.filter_by(franchise_id=f_id).delete()
+            MaterialAsset.query.filter_by(franchise_id=f_id).delete()
+            Purchase.query.filter_by(franchise_id=f_id).delete()
+            GRReturn.query.filter_by(franchise_id=f_id).delete()
+            Expense.query.filter_by(franchise_id=f_id).delete()
+            CompanySupport.query.filter_by(franchise_id=f_id).delete()
+            Document.query.filter_by(franchise_id=f_id).delete()
+            AuditLog.query.filter_by(franchise_id=f_id).delete()
+            VisitExpense.query.filter_by(franchise_id=f_id).delete()
+            db.session.delete(f)
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"Warning during demo data removal: {e}")
 
 def seed_initial_team_users():
     initial_users = [
@@ -376,7 +223,7 @@ def initialize_database_lazily():
             db.create_all()
             seed_default_expense_categories()
             seed_initial_team_users()
-            seed_initial_demo_data()
+            remove_demo_temporary_data()
         except Exception as e:
             try:
                 db.session.rollback()

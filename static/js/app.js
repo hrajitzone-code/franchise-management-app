@@ -104,13 +104,10 @@ function renderFranchiseCards(cards) {
       <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; background: #FFFFFF; border-radius: 16px; border: 1px dashed #CBD5E1; margin-top: 10px;">
         <i class="fa-solid fa-store" style="font-size: 3rem; color: #94A3B8; margin-bottom: 15px;"></i>
         <h3 style="color: #0F172A; margin: 0 0 8px; font-weight: 700;">No Franchises Found</h3>
-        <p style="color: #64748B; margin: 0 0 20px;">Click below to load sample temporary data or create a new franchise.</p>
+        <p style="color: #64748B; margin: 0 0 20px;">Click below to create a new franchise.</p>
         <div style="display: flex; gap: 12px; justify-content: center;">
-          <button class="btn-add-franchise" onclick="loadSampleTemporaryData()" style="background: #2563EB;">
-            <i class="fa-solid fa-database"></i> Add Temporary Data
-          </button>
           <button class="btn-add-franchise" onclick="openNewFranchiseModal()">
-            <i class="fa-solid fa-plus"></i> Add Franchise Lead
+            <i class="fa-solid fa-plus"></i> Add Franchise
           </button>
         </div>
       </div>
@@ -159,19 +156,6 @@ function renderFranchiseCards(cards) {
       </div>
     `;
   }).join('');
-}
-
-async function loadSampleTemporaryData() {
-  try {
-    const res = await fetch('/api/seed_demo_data', { method: 'POST' });
-    const data = await res.json();
-    alert(data.message);
-    loadDashboard();
-    loadExpenseCategories();
-    loadFranchisesList();
-  } catch (err) {
-    alert("Failed to load temporary data.");
-  }
 }
 
 async function deleteFranchiseCard(fId, evt) {
