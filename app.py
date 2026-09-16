@@ -34,30 +34,23 @@ def sanitize_db_url(raw_url):
     url = raw_url.strip()
     if not url:
         return None
+
+    # Cleanly convert postgres:// scheme prefix without touching rest of URL
     if url.startswith('postgres://'):
-        url = url.replace('postgres://', 'postgresql://', 1)
-    
-    parts = url.split('://', 1)
-    if len(parts) == 2:
-        scheme, rest = parts
-        rest = re.sub(r':(?=/|\?|$)', '', rest)
-        url = f"{scheme}://{rest}"
+        url = 'postgresql://' + url[11:]
+    elif not url.startswith('postgresql://'):
+        return None
 
     try:
-        make_url(url)
+        parsed = make_url(url)
+        if not parsed.host:
+            return None
         return url
     except Exception as e:
         print(f"DATABASE_URL validation failed ({e}), falling back to SQLite.")
         return None
 
-db_url = sanitize_db_url(os.environ.get('DATABASE_URL'))
-if db_url:
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'pool_pre_ping': True,
-        'pool_recycle': 300,
-    }
-else:
+def get_sqlite_uri():
     is_writable = False
     try:
         test_path = os.path.join(BASE_DIR, '_write_test.tmp')
@@ -72,7 +65,31 @@ else:
         db_path = os.path.join(BASE_DIR, 'franchise_management.db')
     else:
         db_path = '/tmp/franchise_management.db'
-    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
+    return f"sqlite:///{db_path}"
+
+db_url = sanitize_db_url(os.environ.get('DATABASE_URL'))
+if db_url:
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 300,
+    }
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = get_sqlite_uri()
+
+def switch_to_sqlite():
+    sqlite_uri = get_sqlite_uri()
+    print(f"Switching database engine to SQLite: {sqlite_uri}")
+    app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_uri
+    try:
+        db.engine.dispose()
+    except Exception:
+        pass
+    with app.app_context():
+        db.create_all()
+        seed_default_expense_categories()
+        seed_initial_team_users()
+        seed_initial_demo_data()
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -357,26 +374,21 @@ def initialize_database_lazily():
     if not _db_initialized:
         try:
             db.create_all()
-        except Exception as e:
-            db.session.rollback()
-            print(f"Lazy DB create_all warning: {e}")
-
-        try:
             seed_default_expense_categories()
-        except Exception as e:
-            db.session.rollback()
-
-        try:
             seed_initial_team_users()
-        except Exception as e:
-            db.session.rollback()
-
-        try:
             seed_initial_demo_data()
         except Exception as e:
-            db.session.rollback()
-
-        _db_initialized = True
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            print(f"Primary DB initialization warning ({e}). Falling back to SQLite...")
+            try:
+                switch_to_sqlite()
+            except Exception as e2:
+                print(f"SQLite fallback failed: {e2}")
+        finally:
+            _db_initialized = True
 
 @app.errorhandler(500)
 def handle_500_error(e):
