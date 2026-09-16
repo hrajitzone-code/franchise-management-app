@@ -19,7 +19,7 @@ from models import (
     db, Franchise, Lead, CallHistory, FollowUp, TokenRecord, SurveyVersion, Payment,
     BrandingSetup, MarketingCampaign, TrainingRecord, StoreOperations, MaterialAsset,
     Purchase, GRReturn, ExpenseCategory, Expense, CompanySupport, Document, AuditLog,
-    ImportHistory, VisitExpense, User
+    ImportHistory, VisitExpense, User, Complaint
 )
 from services.report_service import generate_pdf_report, generate_excel_report, generate_word_report
 from services.storage_service import upload_file, get_file_url, is_supabase_configured
@@ -77,6 +77,24 @@ if db_url:
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = get_sqlite_uri()
 
+def check_and_migrate_db():
+    try:
+        inspector = db.inspect(db.engine)
+        if 'leads' in inspector.get_table_names():
+            columns = [c['name'] for c in inspector.get_columns('leads')]
+            with db.engine.connect() as conn:
+                if 'requirements' not in columns:
+                    conn.execute(db.text("ALTER TABLE leads ADD COLUMN requirements TEXT"))
+                if 'plan_discussed' not in columns:
+                    conn.execute(db.text("ALTER TABLE leads ADD COLUMN plan_discussed VARCHAR(100)"))
+                if 'investment_capacity' not in columns:
+                    conn.execute(db.text("ALTER TABLE leads ADD COLUMN investment_capacity VARCHAR(100)"))
+                if 'objections' not in columns:
+                    conn.execute(db.text("ALTER TABLE leads ADD COLUMN objections TEXT"))
+                conn.commit()
+    except Exception as e:
+        print(f"DB auto-migration note: {e}")
+
 def switch_to_sqlite():
     sqlite_uri = get_sqlite_uri()
     print(f"Switching database engine to SQLite: {sqlite_uri}")
@@ -87,6 +105,7 @@ def switch_to_sqlite():
         pass
     with app.app_context():
         db.create_all()
+        check_and_migrate_db()
         seed_default_expense_categories()
         seed_initial_team_users()
         remove_demo_temporary_data()
@@ -221,6 +240,7 @@ def initialize_database_lazily():
     if not _db_initialized:
         try:
             db.create_all()
+            check_and_migrate_db()
             seed_default_expense_categories()
             seed_initial_team_users()
             remove_demo_temporary_data()
@@ -551,6 +571,8 @@ def get_franchise_profile(f_id):
 
     timeline.sort(key=lambda x: x['timestamp'], reverse=True)
 
+    complaints = Complaint.query.filter_by(franchise_id=f_id).order_by(Complaint.created_at.desc()).all()
+
     return jsonify({
         'franchise': franchise.to_dict(),
         'financials': {
@@ -581,6 +603,7 @@ def get_franchise_profile(f_id):
         'expenses': [e.to_dict() for e in expenses],
         'company_support': [cs.to_dict() for cs in company_support],
         'documents': [d.to_dict() for d in documents],
+        'complaints': [comp.to_dict() for comp in complaints],
         'audit_logs': [a.to_dict() for a in audit_logs],
         'timeline': timeline
     })
@@ -819,6 +842,10 @@ def manage_leads():
             source=data.get('source', 'Direct Call'),
             status=data.get('status', 'New Lead'),
             assigned_person=data.get('assigned_person', 'Executive'),
+            requirements=data.get('requirements', ''),
+            plan_discussed=data.get('plan_discussed', ''),
+            investment_capacity=data.get('investment_capacity', ''),
+            objections=data.get('objections', ''),
             remarks=data.get('remarks', '')
         )
         db.session.add(lead)
@@ -838,7 +865,7 @@ def update_delete_lead(l_id):
         log_audit(lead.franchise_id, 'Leads', 'DELETE', 'Admin', 'Lead Record', lead.customer_name, 'Deleted', f"Deleted Lead #{l_id}")
         return jsonify({'status': 'success', 'message': f"Lead #{l_id} deleted."})
     
-    data = request.json
+    data = request.json or request.form
     lead.customer_name = data.get('customer_name', lead.customer_name)
     lead.mobile = data.get('mobile', lead.mobile)
     lead.email = data.get('email', lead.email)
@@ -846,10 +873,182 @@ def update_delete_lead(l_id):
     lead.source = data.get('source', lead.source)
     lead.status = data.get('status', lead.status)
     lead.assigned_person = data.get('assigned_person', lead.assigned_person)
+    lead.requirements = data.get('requirements', lead.requirements)
+    lead.plan_discussed = data.get('plan_discussed', lead.plan_discussed)
+    lead.investment_capacity = data.get('investment_capacity', lead.investment_capacity)
+    lead.objections = data.get('objections', lead.objections)
     lead.remarks = data.get('remarks', lead.remarks)
     db.session.commit()
     log_audit(lead.franchise_id, 'Leads', 'UPDATE', lead.assigned_person, 'Lead Record', None, lead.customer_name, f"Updated Lead #{l_id}")
     return jsonify({'status': 'success', 'lead': lead.to_dict()})
+
+@app.route('/api/leads/<int:l_id>/convert_to_franchise', methods=['POST'])
+def convert_lead_to_franchise(l_id):
+    lead = Lead.query.get_or_404(l_id)
+    data = request.json or request.form or {}
+    
+    agreed_amount = float(data.get('agreed_amount', 500000.0))
+    plan_name = data.get('plan_name') or lead.plan_discussed or 'Standard Plan'
+    token_amount = float(data.get('token_amount', 25000.0))
+    payment_mode = data.get('payment_mode', 'Bank Transfer')
+    reference_no = data.get('reference_no', f"TOKEN-{int(datetime.datetime.now().timestamp())}")
+    
+    ts_str = str(int(datetime.datetime.now().timestamp()))[-4:]
+    code = data.get('code') or f"FR-{ts_str}"
+    
+    franchise = Franchise(
+        code=code,
+        name=f"Ajit Zone - {lead.city or lead.customer_name}",
+        owner_name=lead.customer_name,
+        owner_mobile=lead.mobile,
+        owner_email=lead.email,
+        city=lead.city or 'Unknown City',
+        state=data.get('state', ''),
+        assigned_person=lead.assigned_person,
+        plan_name=plan_name,
+        status='Active',
+        agreed_amount=agreed_amount
+    )
+    db.session.add(franchise)
+    db.session.flush()
+    
+    old_f_id = lead.franchise_id
+    lead.franchise_id = franchise.id
+    lead.status = 'Converted to Franchise'
+    
+    if old_f_id:
+        CallHistory.query.filter_by(franchise_id=old_f_id).update({CallHistory.franchise_id: franchise.id})
+        FollowUp.query.filter_by(franchise_id=old_f_id).update({FollowUp.franchise_id: franchise.id})
+        TokenRecord.query.filter_by(franchise_id=old_f_id).update({TokenRecord.franchise_id: franchise.id})
+        
+    token_rec = TokenRecord(
+        franchise_id=franchise.id,
+        token_amount=token_amount,
+        payment_date=datetime.date.today().strftime('%Y-%m-%d'),
+        payment_mode=payment_mode,
+        reference_no=reference_no,
+        status='Received',
+        remarks=f"Pre-token conversion advance for Lead #{lead.id} ({lead.customer_name})",
+        person=lead.assigned_person
+    )
+    db.session.add(token_rec)
+    db.session.commit()
+    
+    log_audit(franchise.id, 'Lead Conversion', 'CONVERT', lead.assigned_person, 'Lead to Franchise', lead.customer_name, franchise.code, f"Converted Lead #{lead.id} to Franchise {franchise.code}")
+    return jsonify({'status': 'success', 'message': f"Lead successfully converted to Franchise {franchise.code}!", 'franchise': franchise.to_dict()})
+
+# --- COMPLAINTS & ISSUES MODULE ---
+
+@app.route('/api/complaints', methods=['GET', 'POST'])
+def manage_complaints():
+    if request.method == 'POST':
+        document_path = ''
+        if 'document_file' in request.files and request.files['document_file'].filename:
+            file_obj = request.files['document_file']
+            filename = secure_filename(file_obj.filename)
+            file_data = file_obj.read()
+            if is_supabase_configured():
+                s_url = upload_file(file_data, filename, folder='complaints')
+                if s_url:
+                    document_path = s_url
+            if not document_path:
+                comp_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'complaints')
+                os.makedirs(comp_dir, exist_ok=True)
+                local_p = os.path.join(comp_dir, filename)
+                with open(local_p, 'wb') as f:
+                    f.write(file_data)
+                document_path = f"/uploads/complaints/{filename}"
+
+        data = request.form if request.form else (request.json or {})
+        f_id = int(data.get('franchise_id', 1))
+        
+        c = Complaint(
+            franchise_id=f_id,
+            date_time=data.get('date_time', datetime.datetime.now().strftime('%Y-%m-%d %H:%M')),
+            reported_by=data.get('reported_by', 'Store Manager'),
+            category=data.get('category', 'Operations'),
+            issue=data.get('issue', ''),
+            priority=data.get('priority', 'Medium'),
+            assigned_person=data.get('assigned_person', 'Support Team'),
+            status=data.get('status', 'Open'),
+            action_taken=data.get('action_taken', ''),
+            resolution=data.get('resolution', ''),
+            resolution_date=data.get('resolution_date', ''),
+            document_path=document_path or data.get('document_path', ''),
+            remarks=data.get('remarks', '')
+        )
+        db.session.add(c)
+        db.session.commit()
+        log_audit(f_id, 'Complaints', 'CREATE', c.assigned_person, 'Complaint', None, c.category, f"Logged Complaint #{c.id}: {c.category} - {c.priority}")
+        return jsonify({'status': 'success', 'complaint': c.to_dict()})
+
+    f_id = request.args.get('franchise_id')
+    status = request.args.get('status')
+    priority = request.args.get('priority')
+    category = request.args.get('category')
+    search = request.args.get('search', '').strip().lower()
+
+    query = Complaint.query
+    if f_id:
+        query = query.filter_by(franchise_id=int(f_id))
+    if status:
+        query = query.filter_by(status=status)
+    if priority:
+        query = query.filter_by(priority=priority)
+    if category:
+        query = query.filter_by(category=category)
+
+    complaints = query.order_by(Complaint.created_at.desc()).all()
+    if search:
+        complaints = [
+            c for c in complaints if
+            search in c.issue.lower() or
+            search in c.reported_by.lower() or
+            search in c.category.lower() or
+            search in c.assigned_person.lower() or
+            (c.franchise and search in c.franchise.name.lower())
+        ]
+
+    total = len(complaints)
+    open_cnt = sum(1 for c in complaints if c.status == 'Open')
+    in_prog = sum(1 for c in complaints if c.status == 'In Progress')
+    resolved = sum(1 for c in complaints if c.status in ['Resolved', 'Closed'])
+    urgent_high = sum(1 for c in complaints if c.priority in ['High', 'Urgent'])
+
+    return jsonify({
+        'complaints': [c.to_dict() for c in complaints],
+        'stats': {
+            'total': total,
+            'open': open_cnt,
+            'in_progress': in_prog,
+            'resolved': resolved,
+            'urgent_high': urgent_high
+        }
+    })
+
+@app.route('/api/complaints/<int:c_id>', methods=['PUT', 'DELETE'])
+def update_delete_complaint(c_id):
+    c = Complaint.query.get_or_404(c_id)
+    if request.method == 'DELETE':
+        db.session.delete(c)
+        db.session.commit()
+        log_audit(c.franchise_id, 'Complaints', 'DELETE', 'Admin', 'Complaint', c.issue[:30], 'Deleted', f"Deleted Complaint #{c_id}")
+        return jsonify({'status': 'success', 'message': f"Complaint #{c_id} deleted."})
+
+    data = request.json or request.form or {}
+    c.reported_by = data.get('reported_by', c.reported_by)
+    c.category = data.get('category', c.category)
+    c.issue = data.get('issue', c.issue)
+    c.priority = data.get('priority', c.priority)
+    c.assigned_person = data.get('assigned_person', c.assigned_person)
+    c.status = data.get('status', c.status)
+    c.action_taken = data.get('action_taken', c.action_taken)
+    c.resolution = data.get('resolution', c.resolution)
+    c.resolution_date = data.get('resolution_date', c.resolution_date)
+    c.remarks = data.get('remarks', c.remarks)
+    db.session.commit()
+    log_audit(c.franchise_id, 'Complaints', 'UPDATE', c.assigned_person, 'Complaint Status', None, c.status, f"Updated Complaint #{c_id} to {c.status}")
+    return jsonify({'status': 'success', 'complaint': c.to_dict()})
 
 @app.route('/api/followups', methods=['GET', 'POST'])
 def manage_followups():

@@ -184,6 +184,7 @@
           <i class="fa-solid fa-chevron-down category-arrow"></i>
         </div>
         <ul class="submenu">
+          <li id="nav-complaints"><a href="javascript:void(0)" onclick="switchPage('complaints')"><i class="fa-solid fa-triangle-exclamation"></i> <span class="nav-text">Complaints & Issues</span></a></li>
           <li id="nav-audit"><a href="javascript:void(0)" onclick="switchPage('audit')"><i class="fa-solid fa-clock-rotate-left"></i> <span class="nav-text">Audit History</span></a></li>
         </ul>
       </div>
@@ -812,6 +813,247 @@
         <button type="button" onclick="closeResetPasswordModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
         <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #D97706; color: #FFFFFF; cursor: pointer; font-weight: 600;">
           <i class="fa-solid fa-check"></i> Update Password
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add New Franchise Modal -->
+<div id="add-franchise-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 3100; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
+  <div style="background: #FFFFFF; width: 650px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto;">
+    <button onclick="closeNewFranchiseModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-store" style="color: #2563EB;"></i> <span>Create New Franchise Profile</span>
+    </h3>
+    <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 20px;">Enter franchise store details, assigned executive, and plan agreement.</p>
+
+    <form onsubmit="handleNewFranchiseSubmit(event)" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Franchise Code (Auto / Custom)</label>
+        <input type="text" id="add-f-code" placeholder="e.g. FR-2026" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Franchise Name *</label>
+        <input type="text" id="add-f-name" required placeholder="e.g. Ajit Zone Mumbai Hub" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Owner Name *</label>
+        <input type="text" id="add-f-owner-name" required placeholder="e.g. Rajesh Sharma" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Owner Mobile *</label>
+        <input type="tel" id="add-f-owner-mobile" required placeholder="e.g. 9876543210" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Owner Email</label>
+        <input type="email" id="add-f-owner-email" placeholder="e.g. rajesh@example.com" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">City *</label>
+        <input type="text" id="add-f-city" required placeholder="e.g. Mumbai" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">State</label>
+        <input type="text" id="add-f-state" placeholder="e.g. Maharashtra" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Assigned Executive *</label>
+        <input type="text" id="add-f-assigned-person" required placeholder="e.g. Priya Sharma" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Selected Plan</label>
+        <select id="add-f-plan-name" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="Standard Plan" selected>Standard Plan</option>
+          <option value="Gold Plan">Gold Plan</option>
+          <option value="Premium Plan">Premium Plan</option>
+          <option value="FOFO Plan">FOFO Plan</option>
+          <option value="FOCO Plan">FOCO Plan</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Agreed Amount (Rs.)</label>
+        <input type="number" id="add-f-agreed-amount" value="500000" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Franchise Status</label>
+        <select id="add-f-status" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="Active" selected>Active</option>
+          <option value="Agreement">Agreement Signed</option>
+          <option value="Franchise Opening">Opening Phase</option>
+          <option value="Pending">Pending</option>
+        </select>
+      </div>
+
+      <div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" onclick="closeNewFranchiseModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #2563EB; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-plus"></i> Create Franchise
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Convert Lead to Franchise Modal -->
+<div id="convert-lead-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 3200; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
+  <div style="background: #FFFFFF; width: 550px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto;">
+    <button onclick="closeConvertLeadModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-arrows-rotate" style="color: #059669;"></i> <span>Convert Lead to Franchise Profile</span>
+    </h3>
+    <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 15px;" id="convert-lead-info-text">Convert pre-token inquiry to full Franchise profile after Rs. 25,000 Token Advance.</p>
+
+    <form onsubmit="submitConvertLeadToFranchise(event)">
+      <input type="hidden" id="convert-lead-id">
+
+      <div style="margin-bottom: 14px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Token Amount Received (Rs.) *</label>
+        <input type="number" id="convert-token-amount" value="25000" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Payment Mode</label>
+        <select id="convert-payment-mode" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="UPI">UPI / GPay / PhonePe</option>
+          <option value="Bank Transfer" selected>Bank Transfer (NEFT/RTGS)</option>
+          <option value="Cheque">Cheque</option>
+          <option value="Cash">Cash</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Reference No. / UTR / Txn ID</label>
+        <input type="text" id="convert-reference-no" placeholder="e.g. UTR-99881122" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Agreed Total Franchise Fee (Rs.)</label>
+        <input type="number" id="convert-agreed-amount" value="500000" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+        <button type="button" onclick="closeConvertLeadModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #059669; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-circle-check"></i> Convert & Create Franchise Profile
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Complaint Create / Edit Modal -->
+<div id="complaint-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 3300; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
+  <div style="background: #FFFFFF; width: 680px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto;">
+    <button onclick="closeComplaintModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-triangle-exclamation" style="color: #DC2626;"></i> <span id="complaint-modal-title">Log New Franchise Complaint</span>
+    </h3>
+
+    <form id="complaint-form" onsubmit="handleComplaintSubmit(event)" style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+      <input type="hidden" id="complaint-id">
+
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Target Franchise *</label>
+        <select id="complaint-franchise-id" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <!-- Populated dynamically -->
+        </select>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Date & Time *</label>
+        <input type="text" id="complaint-date-time" required placeholder="YYYY-MM-DD HH:MM" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Reported By *</label>
+        <input type="text" id="complaint-reported-by" required placeholder="e.g. Store Owner / Rajesh Sharma" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Category *</label>
+        <select id="complaint-category" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="Operations" selected>Store Operations</option>
+          <option value="IT & POS">IT / Billing POS System</option>
+          <option value="Stock & Supply">Stock & Supply Chain</option>
+          <option value="Billing & Accounts">Billing & Accounts</option>
+          <option value="Marketing">Marketing & Branding</option>
+          <option value="Quality">Product Quality</option>
+          <option value="Other">Other Issues</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Priority *</label>
+        <select id="complaint-priority" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="Low">Low Priority</option>
+          <option value="Medium" selected>Medium Priority</option>
+          <option value="High">High Priority</option>
+          <option value="Urgent">Urgent / Critical</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Assigned Person / Dept *</label>
+        <input type="text" id="complaint-assigned-person" required placeholder="e.g. Support Team / Dhruvesh" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Status</label>
+        <select id="complaint-status" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="Open" selected>Open</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Escalated">Escalated</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Closed">Closed</option>
+        </select>
+      </div>
+
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Issue Description *</label>
+        <textarea id="complaint-issue" required rows="3" placeholder="Describe the complaint or issue in detail..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; font-family: inherit;"></textarea>
+      </div>
+
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Action Taken</label>
+        <textarea id="complaint-action-taken" rows="2" placeholder="Action steps taken..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; font-family: inherit;"></textarea>
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Resolution Details</label>
+        <input type="text" id="complaint-resolution" placeholder="Final resolution outcome..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div>
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Resolution Date</label>
+        <input type="date" id="complaint-resolution-date" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Upload Supporting Photo / Document</label>
+        <input type="file" id="complaint-document-file" accept=".png,.jpg,.jpeg,.pdf,.doc,.docx" style="width: 100%; padding: 6px; font-size: 0.82rem;">
+        <div id="complaint-document-preview" style="font-size: 0.78rem; color: #2563EB; margin-top: 4px;"></div>
+      </div>
+
+      <div style="grid-column: span 2;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Remarks</label>
+        <textarea id="complaint-remarks" rows="2" placeholder="Additional remarks..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; font-family: inherit;"></textarea>
+      </div>
+
+      <div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" onclick="closeComplaintModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #2563EB; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-floppy-disk"></i> Save Complaint Record
         </button>
       </div>
     </form>

@@ -304,6 +304,7 @@ function renderModulePage(pageId) {
     'support': 'What We Provided / Company Support Summary',
     'performance': 'Performance Analytics',
     'reports': 'Reports & Exports Generator (PDF, Excel, Word)',
+    'complaints': 'Franchise Complaints & Issues Module',
     'audit': 'System Audit History Log',
     'users': 'User Management & Access Control',
     'permissions': 'User Roles & Access Control'
@@ -316,6 +317,8 @@ function renderModulePage(pageId) {
     renderExpensesWorkspace(contentEl);
   } else if (pageId === 'visit_expenses') {
     renderVisitExpensesWorkspace(contentEl);
+  } else if (pageId === 'complaints') {
+    renderComplaintsWorkspace(contentEl);
   } else if (pageId === 'users' || pageId === 'permissions') {
     renderUsersWorkspace(contentEl);
   } else if (pageId === 'reports') {
@@ -1880,6 +1883,7 @@ const ALL_MODULES = [
   { key: 'training', name: 'Staff Training' },
   { key: 'interior', name: 'Interior & Store Setup' },
   { key: 'marketing', name: 'Marketing Campaigns' },
+  { key: 'complaints', name: 'Complaints & Issues' },
   { key: 'reports', name: 'Reports & Exports' },
   { key: 'settings', name: 'Settings & Master Setup' },
   { key: 'user_management', name: 'User Management' }
@@ -2552,6 +2556,7 @@ function applyPermissionsToUI(user) {
     'training': ['nav-training'],
     'interior': ['nav-interior'],
     'marketing': ['nav-marketing', 'nav-branding', 'nav-influencer', 'nav-operations', 'nav-opening', 'nav-active'],
+    'complaints': ['nav-complaints'],
     'reports': ['nav-reports', 'nav-performance']
   };
 
@@ -2573,6 +2578,417 @@ function applyPermissionsToUI(user) {
     const visibleItems = cat.querySelectorAll('.submenu li[style*="display: block"], .submenu li:not([style*="display: none"])');
     cat.style.display = visibleItems.length > 0 ? 'block' : 'none';
   });
+}
+
+// --- ADD FRANCHISE MODAL HANDLERS ---
+
+function openNewFranchiseModal() {
+  const modal = document.getElementById('add-franchise-modal');
+  if (modal) {
+    document.getElementById('add-f-code').value = `FR-${Math.floor(1000 + Math.random() * 9000)}`;
+    document.getElementById('add-f-name').value = '';
+    document.getElementById('add-f-owner-name').value = '';
+    document.getElementById('add-f-owner-mobile').value = '';
+    document.getElementById('add-f-owner-email').value = '';
+    document.getElementById('add-f-city').value = '';
+    document.getElementById('add-f-state').value = '';
+    document.getElementById('add-f-assigned-person').value = 'Priya Sharma';
+    document.getElementById('add-f-plan-name').value = 'Standard Plan';
+    document.getElementById('add-f-agreed-amount').value = 500000;
+    document.getElementById('add-f-status').value = 'Active';
+    modal.style.display = 'flex';
+  }
+}
+
+function closeNewFranchiseModal() {
+  const modal = document.getElementById('add-franchise-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleNewFranchiseSubmit(evt) {
+  evt.preventDefault();
+  const payload = {
+    code: document.getElementById('add-f-code').value.trim(),
+    name: document.getElementById('add-f-name').value.trim(),
+    owner_name: document.getElementById('add-f-owner-name').value.trim(),
+    owner_mobile: document.getElementById('add-f-owner-mobile').value.trim(),
+    owner_email: document.getElementById('add-f-owner-email').value.trim(),
+    city: document.getElementById('add-f-city').value.trim(),
+    state: document.getElementById('add-f-state').value.trim(),
+    assigned_person: document.getElementById('add-f-assigned-person').value.trim(),
+    plan_name: document.getElementById('add-f-plan-name').value,
+    agreed_amount: parseFloat(document.getElementById('add-f-agreed-amount').value || 500000),
+    status: document.getElementById('add-f-status').value
+  };
+
+  try {
+    const res = await fetch('/api/franchises', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(`Franchise "${data.franchise.name}" created successfully!`);
+      closeNewFranchiseModal();
+      loadDashboard();
+      loadFranchisesList();
+    } else {
+      alert(data.error || 'Failed to create franchise');
+    }
+  } catch (err) {
+    console.error('Error creating franchise:', err);
+    alert('Failed to connect to server.');
+  }
+}
+
+// --- CONVERT LEAD TO FRANCHISE HANDLERS ---
+
+function openConvertLeadModal(leadId, leadName, leadCity, leadPlan) {
+  const modal = document.getElementById('convert-lead-modal');
+  if (modal) {
+    document.getElementById('convert-lead-id').value = leadId;
+    document.getElementById('convert-token-amount').value = 25000;
+    document.getElementById('convert-payment-mode').value = 'Bank Transfer';
+    document.getElementById('convert-reference-no').value = `TXN-${Math.floor(100000 + Math.random() * 900000)}`;
+    document.getElementById('convert-agreed-amount').value = 500000;
+    const infoEl = document.getElementById('convert-lead-info-text');
+    if (infoEl) {
+      infoEl.innerText = `Converting pre-token inquiry "${leadName || 'Lead'}" (${leadCity || 'City'}) into full Franchise Profile.`;
+    }
+    modal.style.display = 'flex';
+  }
+}
+
+function closeConvertLeadModal() {
+  const modal = document.getElementById('convert-lead-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function submitConvertLeadToFranchise(evt) {
+  evt.preventDefault();
+  const leadId = document.getElementById('convert-lead-id').value;
+  const payload = {
+    token_amount: parseFloat(document.getElementById('convert-token-amount').value || 25000),
+    payment_mode: document.getElementById('convert-payment-mode').value,
+    reference_no: document.getElementById('convert-reference-no').value.trim(),
+    agreed_amount: parseFloat(document.getElementById('convert-agreed-amount').value || 500000)
+  };
+
+  try {
+    const res = await fetch(`/api/leads/${leadId}/convert_to_franchise`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(data.message);
+      closeConvertLeadModal();
+      loadDashboard();
+      loadFranchisesList();
+      if (data.franchise && data.franchise.id) {
+        exploreFranchise(data.franchise.id);
+      }
+    } else {
+      alert(data.error || 'Failed to convert lead to franchise.');
+    }
+  } catch (err) {
+    console.error('Error converting lead:', err);
+    alert('Server error during lead conversion.');
+  }
+}
+
+// --- COMPLAINTS & ISSUES MODULE WORKSPACE ---
+
+function renderComplaintsWorkspace(container) {
+  container.innerHTML = `
+    <!-- Complaints KPIs -->
+    <div class="kpi-container" style="grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px;">
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4>Total Complaints</h4>
+          <p id="comp-kpi-total">0</p>
+        </div>
+        <div class="kpi-icon icon-blue"><i class="fa-solid fa-triangle-exclamation"></i></div>
+      </div>
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4>Open Issues</h4>
+          <p id="comp-kpi-open" style="color: #DC2626;">0</p>
+        </div>
+        <div class="kpi-icon icon-red"><i class="fa-solid fa-folder-open"></i></div>
+      </div>
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4>In Progress</h4>
+          <p id="comp-kpi-progress" style="color: #D97706;">0</p>
+        </div>
+        <div class="kpi-icon icon-orange"><i class="fa-solid fa-spinner"></i></div>
+      </div>
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4>Resolved / Closed</h4>
+          <p id="comp-kpi-resolved" style="color: #059669;">0</p>
+        </div>
+        <div class="kpi-icon icon-green"><i class="fa-solid fa-circle-check"></i></div>
+      </div>
+      <div class="kpi-card" style="padding: 15px;">
+        <div class="kpi-info">
+          <h4>High / Urgent</h4>
+          <p id="comp-kpi-urgent" style="color: #7C3AED;">0</p>
+        </div>
+        <div class="kpi-icon icon-purple"><i class="fa-solid fa-fire"></i></div>
+      </div>
+    </div>
+
+    <!-- Filters & Action Header -->
+    <div style="background: #F8FAFC; padding: 15px; border-radius: 10px; border: 1px solid #E2E8F0; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <select id="comp-filter-franchise" onchange="loadComplaints()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="">All Franchises</option>
+          ${allFranchisesList.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+        </select>
+
+        <select id="comp-filter-category" onchange="loadComplaints()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="">All Categories</option>
+          <option value="Operations">Operations</option>
+          <option value="IT & POS">IT & POS</option>
+          <option value="Stock & Supply">Stock & Supply</option>
+          <option value="Billing & Accounts">Billing & Accounts</option>
+          <option value="Marketing">Marketing</option>
+          <option value="Quality">Product Quality</option>
+          <option value="Other">Other</option>
+        </select>
+
+        <select id="comp-filter-priority" onchange="loadComplaints()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="">All Priorities</option>
+          <option value="Low">Low</option>
+          <option value="Medium">Medium</option>
+          <option value="High">High</option>
+          <option value="Urgent">Urgent</option>
+        </select>
+
+        <select id="comp-filter-status" onchange="loadComplaints()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="">All Statuses</option>
+          <option value="Open">Open</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Escalated">Escalated</option>
+          <option value="Resolved">Resolved</option>
+          <option value="Closed">Closed</option>
+        </select>
+      </div>
+
+      <button onclick="openComplaintModal()" class="btn-add-franchise" style="background: #2563EB;">
+        <i class="fa-solid fa-plus"></i> Log New Complaint
+      </button>
+    </div>
+
+    <!-- Table Container -->
+    <div id="complaints-table-container"></div>
+  `;
+  loadComplaints();
+}
+
+async function loadComplaints() {
+  const tableContainer = document.getElementById('complaints-table-container');
+  if (!tableContainer) return;
+
+  const fId = document.getElementById('comp-filter-franchise')?.value || '';
+  const category = document.getElementById('comp-filter-category')?.value || '';
+  const priority = document.getElementById('comp-filter-priority')?.value || '';
+  const status = document.getElementById('comp-filter-status')?.value || '';
+  const search = document.getElementById('global-search')?.value || '';
+
+  const params = new URLSearchParams({ franchise_id: fId, category, priority, status, search });
+  try {
+    const res = await fetch(`/api/complaints?${params.toString()}`);
+    const data = await res.json();
+
+    if (data.stats) {
+      if (document.getElementById('comp-kpi-total')) document.getElementById('comp-kpi-total').innerText = data.stats.total || 0;
+      if (document.getElementById('comp-kpi-open')) document.getElementById('comp-kpi-open').innerText = data.stats.open || 0;
+      if (document.getElementById('comp-kpi-progress')) document.getElementById('comp-kpi-progress').innerText = data.stats.in_progress || 0;
+      if (document.getElementById('comp-kpi-resolved')) document.getElementById('comp-kpi-resolved').innerText = data.stats.resolved || 0;
+      if (document.getElementById('comp-kpi-urgent')) document.getElementById('comp-kpi-urgent').innerText = data.stats.urgent_high || 0;
+    }
+
+    if (!data.complaints || data.complaints.length === 0) {
+      tableContainer.innerHTML = `
+        <div style="padding: 40px; text-align: center; background: #FFFFFF; border-radius: 12px; border: 1px dashed #CBD5E1;">
+          <i class="fa-solid fa-clipboard-check" style="font-size: 2.5rem; color: #94A3B8; margin-bottom: 10px;"></i>
+          <h4 style="margin: 0 0 5px; color: #0F172A;">No Complaints Recorded</h4>
+          <p style="color: #64748B; margin: 0 0 15px; font-size: 0.88rem;">Click below to log a new franchise complaint or issue.</p>
+          <button onclick="openComplaintModal()" class="btn-add-franchise" style="width: auto; margin: 0 auto;">
+            <i class="fa-solid fa-plus"></i> Log New Complaint
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    tableContainer.innerHTML = `
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Franchise Store</th>
+            <th>Reported By</th>
+            <th>Category</th>
+            <th>Issue Description</th>
+            <th>Priority</th>
+            <th>Assigned To</th>
+            <th>Status</th>
+            <th>Resolution / Action</th>
+            <th>Attachment</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.complaints.map(c => {
+            const prioColor = c.priority === 'Urgent' ? '#DC2626' : (c.priority === 'High' ? '#D97706' : '#2563EB');
+            const statusBg = c.status === 'Open' ? '#FEF2F2' : (c.status === 'In Progress' ? '#FEF3C7' : '#ECFDF5');
+            const statusText = c.status === 'Open' ? '#DC2626' : (c.status === 'In Progress' ? '#D97706' : '#059669');
+
+            return `
+              <tr>
+                <td>${c.date_time}</td>
+                <td><b>${c.franchise_name}</b> <br><small style="color:#94A3B8;">${c.franchise_code}</small></td>
+                <td>${c.reported_by}</td>
+                <td><span class="records-badge">${c.category}</span></td>
+                <td style="max-width: 250px;">${c.issue}</td>
+                <td><b style="color: ${prioColor}">${c.priority}</b></td>
+                <td>${c.assigned_person}</td>
+                <td><span style="background: ${statusBg}; color: ${statusText}; padding: 3px 8px; border-radius: 9999px; font-weight: 600; font-size: 0.78rem;">${c.status}</span></td>
+                <td style="max-width: 200px;">
+                  ${c.resolution ? `<b>Res:</b> ${c.resolution} <br><small style="color:#64748B;">${c.resolution_date || ''}</small>` : (c.action_taken || '-')}
+                </td>
+                <td>
+                  ${c.document_path ? `
+                    <button onclick="previewPDF('${c.document_path}')" style="background:#EFF6FF; color:#2563EB; border:1px solid #BFDBFE; padding:3px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;">
+                      <i class="fa-solid fa-paperclip"></i> File
+                    </button>
+                  ` : '-'}
+                </td>
+                <td style="white-space: nowrap;">
+                  <button onclick='openComplaintModal(${JSON.stringify(c).replace(/'/g, "&apos;")})' style="background:#EFF6FF; color:#2563EB; border:1px solid #BFDBFE; padding:4px 8px; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer; margin-right:4px;">
+                    <i class="fa-solid fa-pen"></i> Edit
+                  </button>
+                  <button onclick="deleteComplaint(${c.id})" style="background:#FEF2F2; color:#DC2626; border:1px solid #FCA5A5; padding:4px 8px; border-radius:6px; font-size:0.78rem; cursor:pointer;">
+                    <i class="fa-solid fa-trash-can"></i> Delete
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (err) {
+    console.error('Error loading complaints:', err);
+  }
+}
+
+function openComplaintModal(data = null) {
+  const modal = document.getElementById('complaint-modal');
+  if (!modal) return;
+
+  const fSelect = document.getElementById('complaint-franchise-id');
+  if (fSelect) {
+    fSelect.innerHTML = allFranchisesList.map(f => `<option value="${f.id}">${f.name} (${f.code})</option>`).join('');
+  }
+
+  if (data) {
+    document.getElementById('complaint-modal-title').innerText = 'Edit Complaint Record';
+    document.getElementById('complaint-id').value = data.id;
+    document.getElementById('complaint-franchise-id').value = data.franchise_id;
+    document.getElementById('complaint-date-time').value = data.date_time || '';
+    document.getElementById('complaint-reported-by').value = data.reported_by || '';
+    document.getElementById('complaint-category').value = data.category || 'Operations';
+    document.getElementById('complaint-priority').value = data.priority || 'Medium';
+    document.getElementById('complaint-assigned-person').value = data.assigned_person || '';
+    document.getElementById('complaint-status').value = data.status || 'Open';
+    document.getElementById('complaint-issue').value = data.issue || '';
+    document.getElementById('complaint-action-taken').value = data.action_taken || '';
+    document.getElementById('complaint-resolution').value = data.resolution || '';
+    document.getElementById('complaint-resolution-date').value = data.resolution_date || '';
+    document.getElementById('complaint-remarks').value = data.remarks || '';
+  } else {
+    document.getElementById('complaint-modal-title').innerText = 'Log New Franchise Complaint';
+    document.getElementById('complaint-id').value = '';
+    document.getElementById('complaint-date-time').value = new Date().toISOString().replace('T', ' ').substring(0, 16);
+    document.getElementById('complaint-reported-by').value = '';
+    document.getElementById('complaint-category').value = 'Operations';
+    document.getElementById('complaint-priority').value = 'Medium';
+    document.getElementById('complaint-assigned-person').value = 'Support Team';
+    document.getElementById('complaint-status').value = 'Open';
+    document.getElementById('complaint-issue').value = '';
+    document.getElementById('complaint-action-taken').value = '';
+    document.getElementById('complaint-resolution').value = '';
+    document.getElementById('complaint-resolution-date').value = '';
+    document.getElementById('complaint-remarks').value = '';
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeComplaintModal() {
+  const modal = document.getElementById('complaint-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleComplaintSubmit(evt) {
+  evt.preventDefault();
+  const cId = document.getElementById('complaint-id').value;
+  const isEdit = !!cId;
+  const fileInput = document.getElementById('complaint-document-file');
+
+  const formData = new FormData();
+  formData.append('franchise_id', document.getElementById('complaint-franchise-id').value);
+  formData.append('date_time', document.getElementById('complaint-date-time').value);
+  formData.append('reported_by', document.getElementById('complaint-reported-by').value);
+  formData.append('category', document.getElementById('complaint-category').value);
+  formData.append('priority', document.getElementById('complaint-priority').value);
+  formData.append('assigned_person', document.getElementById('complaint-assigned-person').value);
+  formData.append('status', document.getElementById('complaint-status').value);
+  formData.append('issue', document.getElementById('complaint-issue').value);
+  formData.append('action_taken', document.getElementById('complaint-action-taken').value);
+  formData.append('resolution', document.getElementById('complaint-resolution').value);
+  formData.append('resolution_date', document.getElementById('complaint-resolution-date').value);
+  formData.append('remarks', document.getElementById('complaint-remarks').value);
+
+  if (fileInput && fileInput.files[0]) {
+    formData.append('document_file', fileInput.files[0]);
+  }
+
+  try {
+    const url = isEdit ? `/api/complaints/${cId}` : '/api/complaints';
+    const method = isEdit ? 'PUT' : 'POST';
+    const res = await fetch(url, { method, body: formData });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(`Complaint ${isEdit ? 'updated' : 'logged'} successfully!`);
+      closeComplaintModal();
+      loadComplaints();
+    } else {
+      alert(data.error || 'Failed to save complaint');
+    }
+  } catch (err) {
+    console.error('Error saving complaint:', err);
+    alert('Failed to connect to server.');
+  }
+}
+
+async function deleteComplaint(cId) {
+  if (!confirm('Are you sure you want to delete this complaint record?')) return;
+  try {
+    const res = await fetch(`/api/complaints/${cId}`, { method: 'DELETE' });
+    const data = await res.json();
+    alert(data.message);
+    loadComplaints();
+  } catch (err) {
+    alert('Failed to delete complaint.');
+  }
 }
 
 

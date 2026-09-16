@@ -50,6 +50,10 @@ class Lead(db.Model):
     source = db.Column(db.String(100), default='Direct Call')
     status = db.Column(db.String(50), default='New Lead')
     assigned_person = db.Column(db.String(100), nullable=False)
+    requirements = db.Column(db.Text, nullable=True)
+    plan_discussed = db.Column(db.String(100), nullable=True)
+    investment_capacity = db.Column(db.String(100), nullable=True)
+    objections = db.Column(db.Text, nullable=True)
     remarks = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -64,6 +68,10 @@ class Lead(db.Model):
             'source': self.source,
             'status': self.status,
             'assigned_person': self.assigned_person,
+            'requirements': self.requirements or '',
+            'plan_discussed': self.plan_discussed or '',
+            'investment_capacity': self.investment_capacity or '',
+            'objections': self.objections or '',
             'remarks': self.remarks or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
@@ -685,6 +693,47 @@ class VisitExpense(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
 
+class Complaint(db.Model):
+    __tablename__ = 'complaints'
+    id = db.Column(db.Integer, primary_key=True)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=False)
+    date_time = db.Column(db.String(50), nullable=False)
+    reported_by = db.Column(db.String(100), nullable=False)
+    category = db.Column(db.String(100), default='Operations')
+    issue = db.Column(db.Text, nullable=False)
+    priority = db.Column(db.String(50), default='Medium')
+    assigned_person = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(50), default='Open')
+    action_taken = db.Column(db.Text, nullable=True)
+    resolution = db.Column(db.Text, nullable=True)
+    resolution_date = db.Column(db.String(50), nullable=True)
+    document_path = db.Column(db.String(255), nullable=True)
+    remarks = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    franchise = db.relationship('Franchise', backref=db.backref('complaints', lazy=True))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'franchise_id': self.franchise_id,
+            'franchise_name': self.franchise.name if self.franchise else '',
+            'franchise_code': self.franchise.code if self.franchise else '',
+            'date_time': self.date_time,
+            'reported_by': self.reported_by,
+            'category': self.category,
+            'issue': self.issue,
+            'priority': self.priority,
+            'assigned_person': self.assigned_person,
+            'status': self.status,
+            'action_taken': self.action_taken or '',
+            'resolution': self.resolution or '',
+            'resolution_date': self.resolution_date or '',
+            'document_path': self.document_path or '',
+            'remarks': self.remarks or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
@@ -722,7 +771,7 @@ class User(db.Model):
         all_modules = [
             'leads', 'calling', 'followup', 'survey', 'visit', 'payments', 
             'expenses', 'purchase', 'gr', 'training', 'interior', 'marketing', 
-            'reports', 'settings', 'user_management'
+            'complaints', 'reports', 'settings', 'user_management'
         ]
         
         if role == 'Super Admin':
