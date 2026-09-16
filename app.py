@@ -287,21 +287,28 @@ def seed_initial_demo_data():
 
     db.session.commit()
 
-def seed_default_admin_user():
-    if not User.query.first():
-        admin_email = os.environ.get('DEFAULT_ADMIN_USER', 'admin@franchise.com')
-        admin_pass = os.environ.get('DEFAULT_ADMIN_PASS', 'Admin@123456')
-        admin_user = User(
-            full_name="System Admin",
-            username=admin_email,
-            mobile="9999999999",
-            role="Admin",
-            department="Management",
-            is_active=True
-        )
-        admin_user.set_password(admin_pass)
-        db.session.add(admin_user)
-        db.session.commit()
+def seed_initial_team_users():
+    initial_users = [
+        {"full_name": "Kenal Kapadia", "username": "kenal@franchise.com", "role": "Super Admin", "password": "Kenal@123456", "department": "Management"},
+        {"full_name": "Sakshi Shukla", "username": "sakshi@franchise.com", "role": "Super Admin", "password": "Sakshi@123456", "department": "Management"},
+        {"full_name": "Dhruvesh Rajpurohit", "username": "dhruvesh@franchise.com", "role": "Manager", "password": "Dhruvesh@123456", "department": "Operations"},
+        {"full_name": "Vishal Tiwari", "username": "vishal@franchise.com", "role": "Field Executive", "password": "Vishal@123456", "department": "Field Operations"},
+        {"full_name": "Avinash Mishra", "username": "avinash@franchise.com", "role": "Accountant", "password": "Avinash@123456", "department": "Finance & Accounts"},
+        {"full_name": "Dinky Vaishnav", "username": "dinky@franchise.com", "role": "Manager", "password": "Dinky@123456", "department": "Sales"}
+    ]
+    for udata in initial_users:
+        u = User.query.filter_by(username=udata["username"]).first()
+        if not u:
+            u = User(
+                full_name=udata["full_name"],
+                username=udata["username"],
+                role=udata["role"],
+                department=udata["department"],
+                is_active=True
+            )
+            u.set_password(udata["password"])
+            db.session.add(u)
+    db.session.commit()
 
 def get_current_user():
     user_id = session.get('user_id')
@@ -337,7 +344,7 @@ def permission_required(module, action):
 
 def scope_query_by_user(query, model):
     user = get_current_user()
-    if user and user.role != 'Admin' and user.franchise_id:
+    if user and user.role != 'Super Admin' and user.franchise_id:
         if hasattr(model, 'franchise_id'):
             return query.filter(model.franchise_id == user.franchise_id)
     return query
@@ -351,7 +358,7 @@ def initialize_database_lazily():
         try:
             db.create_all()
             seed_default_expense_categories()
-            seed_default_admin_user()
+            seed_initial_team_users()
             seed_initial_demo_data()
         except Exception as e:
             print(f"Lazy DB initialization warning: {e}")
@@ -2166,8 +2173,8 @@ def auth_me():
 @app.route('/api/users', methods=['GET'])
 def get_users():
     current_user = get_current_user()
-    if not current_user or current_user.role != 'Admin':
-        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
     search_q = request.args.get('search', '').strip().lower()
     role_filter = request.args.get('role', '').strip()
@@ -2199,8 +2206,8 @@ def get_users():
 @app.route('/api/users', methods=['POST'])
 def create_user():
     current_user = get_current_user()
-    if not current_user or current_user.role != 'Admin':
-        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
     data = request.json or request.form
     full_name = (data.get('full_name') or '').strip()
@@ -2246,8 +2253,8 @@ def create_user():
 @app.route('/api/users/<int:user_id>', methods=['PUT'])
 def update_user(user_id):
     current_user = get_current_user()
-    if not current_user or current_user.role != 'Admin':
-        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
     u = User.query.get_or_404(user_id)
     data = request.json or request.form
@@ -2280,8 +2287,8 @@ def update_user(user_id):
 @app.route('/api/users/<int:user_id>/status', methods=['PUT'])
 def toggle_user_status(user_id):
     current_user = get_current_user()
-    if not current_user or current_user.role != 'Admin':
-        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
     u = User.query.get_or_404(user_id)
     if u.id == current_user.id:
@@ -2306,8 +2313,8 @@ def toggle_user_status(user_id):
 @app.route('/api/users/<int:user_id>/reset_password', methods=['POST'])
 def reset_user_password(user_id):
     current_user = get_current_user()
-    if not current_user or current_user.role != 'Admin':
-        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
     u = User.query.get_or_404(user_id)
     data = request.json or request.form
@@ -2325,8 +2332,8 @@ def reset_user_password(user_id):
 @app.route('/api/users/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
     current_user = get_current_user()
-    if not current_user or current_user.role != 'Admin':
-        return jsonify({'error': 'Access denied. Admin permissions required.'}), 403
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
     u = User.query.get_or_404(user_id)
     if u.id == current_user.id:

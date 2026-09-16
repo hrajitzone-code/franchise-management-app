@@ -725,41 +725,60 @@ class User(db.Model):
             'reports', 'settings', 'user_management'
         ]
         
-        if role == 'Admin':
+        if role == 'Super Admin':
             return {
                 m: {'view': True, 'add': True, 'edit': True, 'delete': True, 'approve': True, 'export': True}
                 for m in all_modules
             }
+        elif role == 'Admin':
+            res = {
+                m: {'view': True, 'add': True, 'edit': True, 'delete': True, 'approve': True, 'export': True}
+                for m in all_modules
+            }
+            res['user_management'] = {'view': False, 'add': False, 'edit': False, 'delete': False, 'approve': False, 'export': False}
+            return res
         elif role == 'Manager':
-            return {
+            res = {
                 m: {'view': True, 'add': True, 'edit': True, 'delete': False, 'approve': True, 'export': True}
                 for m in all_modules
             }
+            res['user_management'] = {'view': False, 'add': False, 'edit': False, 'delete': False, 'approve': False, 'export': False}
+            return res
         elif role == 'Field Executive':
             fe_modules = ['leads', 'calling', 'followup', 'survey', 'visit', 'training', 'interior']
-            return {
+            res = {
                 m: {'view': m in fe_modules, 'add': m in fe_modules, 'edit': m in fe_modules, 'delete': False, 'approve': False, 'export': False}
                 for m in all_modules
             }
+            res['user_management'] = {'view': False, 'add': False, 'edit': False, 'delete': False, 'approve': False, 'export': False}
+            return res
         elif role == 'Accountant':
             acc_modules = ['payments', 'expenses', 'purchase', 'gr', 'reports']
-            return {
+            res = {
                 m: {'view': m in acc_modules, 'add': m in acc_modules, 'edit': m in acc_modules, 'delete': False, 'approve': True, 'export': True}
                 for m in all_modules
             }
+            res['user_management'] = {'view': False, 'add': False, 'edit': False, 'delete': False, 'approve': False, 'export': False}
+            return res
         elif role == 'Franchisee':
             fr_modules = ['survey', 'payments', 'expenses', 'purchase', 'gr', 'training', 'interior', 'marketing']
-            return {
+            res = {
                 m: {'view': m in fr_modules, 'add': m in fr_modules, 'edit': False, 'delete': False, 'approve': False, 'export': False}
                 for m in all_modules
             }
-        return {
+            res['user_management'] = {'view': False, 'add': False, 'edit': False, 'delete': False, 'approve': False, 'export': False}
+            return res
+        res = {
             m: {'view': True, 'add': False, 'edit': False, 'delete': False, 'approve': False, 'export': False}
             for m in all_modules
         }
+        res['user_management'] = {'view': False, 'add': False, 'edit': False, 'delete': False, 'approve': False, 'export': False}
+        return res
 
     def has_permission(self, module, action):
-        if self.role == 'Admin':
+        if module == 'user_management':
+            return self.role == 'Super Admin'
+        if self.role == 'Super Admin':
             return True
         perms = self.get_permissions()
         mod_perms = perms.get(module, {})
@@ -772,6 +791,7 @@ class User(db.Model):
             'username': self.username,
             'mobile': self.mobile or '',
             'role': self.role,
+            'is_super_admin': self.role == 'Super Admin',
             'franchise_id': self.franchise_id,
             'franchise_name': self.franchise.name if self.franchise else 'All Franchises',
             'department': self.department or '',

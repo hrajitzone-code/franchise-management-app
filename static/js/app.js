@@ -9,11 +9,7 @@ let expenseCategoriesList = [];
 let allFranchisesList = [];
 
 document.addEventListener('DOMContentLoaded', () => {
-  restoreSidebarState();
-  initEventListeners();
-  loadDashboard();
-  loadExpenseCategories();
-  loadFranchisesList();
+  checkAuthSession();
 });
 
 function initEventListeners() {
@@ -2420,6 +2416,171 @@ async function deleteUser(userId, userName) {
   } catch (err) {
     console.error('Error deleting user:', err);
   }
+}
+
+// --- AUTHENTICATION & PERMISSIONS ENFORCEMENT ---
+
+let currentUser = null;
+
+async function checkAuthSession() {
+  try {
+    const res = await fetch('/api/auth/me');
+    const data = await res.json();
+    if (data.authenticated && data.user) {
+      currentUser = data.user;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app-container').style.display = 'flex';
+      
+      const nameEl = document.getElementById('current-user-fullname');
+      const roleEl = document.getElementById('current-role-badge');
+      if (nameEl) nameEl.innerText = currentUser.full_name;
+      if (roleEl) {
+        roleEl.innerText = currentUser.role;
+        if (currentUser.role === 'Super Admin') {
+          roleEl.style.background = '#FEF3C7';
+          roleEl.style.color = '#92400E';
+          roleEl.style.border = '1px solid #FCD34D';
+        } else {
+          roleEl.style.background = '#DBEAFE';
+          roleEl.style.color = '#1E40AF';
+          roleEl.style.border = '1px solid #93C5FD';
+        }
+      }
+
+      applyPermissionsToUI(currentUser);
+
+      restoreSidebarState();
+      initEventListeners();
+      loadDashboard();
+      loadExpenseCategories();
+      loadFranchisesList();
+    } else {
+      showLoginScreen();
+    }
+  } catch (err) {
+    console.error('Error checking auth session:', err);
+    showLoginScreen();
+  }
+}
+
+function showLoginScreen() {
+  currentUser = null;
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-container').style.display = 'none';
+}
+
+function quickLogin(username, password) {
+  document.getElementById('login-username').value = username;
+  document.getElementById('login-password').value = password;
+  handleLoginSubmit(new Event('submit'));
+}
+
+async function handleLoginSubmit(e) {
+  if (e) e.preventDefault();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value.trim();
+  const errorAlert = document.getElementById('login-error-alert');
+  const btn = document.getElementById('login-btn');
+
+  if (!username || !password) {
+    if (errorAlert) {
+      errorAlert.innerText = 'Please enter both Username/Email and Password.';
+      errorAlert.style.display = 'block';
+    }
+    return;
+  }
+
+  if (errorAlert) errorAlert.style.display = 'none';
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      checkAuthSession();
+    } else {
+      if (errorAlert) {
+        errorAlert.innerText = data.message || 'Invalid username or password.';
+        errorAlert.style.display = 'block';
+      }
+    }
+  } catch (err) {
+    console.error('Login error:', err);
+    if (errorAlert) {
+      errorAlert.innerText = 'Server connection error. Please try again.';
+      errorAlert.style.display = 'block';
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function handleLogout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch (err) {
+    console.error('Logout error:', err);
+  } finally {
+    showLoginScreen();
+  }
+}
+
+function applyPermissionsToUI(user) {
+  const isSuperAdmin = user.role === 'Super Admin';
+  const perms = user.permissions || {};
+
+  // User Management visibility (Strictly Super Admin only)
+  const navUsers = document.getElementById('nav-users');
+  if (navUsers) {
+    navUsers.style.display = isSuperAdmin ? 'block' : 'none';
+  }
+
+  if (isSuperAdmin) {
+    // Show all categories & menu items
+    document.querySelectorAll('#sidebar .nav-category').forEach(el => el.style.display = 'block');
+    document.querySelectorAll('#sidebar .submenu li').forEach(el => el.style.display = 'block');
+    return;
+  }
+
+  // Module to Sidebar Element IDs Map
+  const moduleNavMap = {
+    'leads': ['nav-leads', 'nav-plans'],
+    'calling': ['nav-calling'],
+    'followup': ['nav-followup'],
+    'survey': ['nav-survey'],
+    'visit': ['nav-visit_expenses'],
+    'payments': ['nav-payments', 'nav-token', 'nav-agreement'],
+    'expenses': ['nav-expenses'],
+    'purchase': ['nav-purchases', 'nav-materials'],
+    'gr': ['nav-gr'],
+    'training': ['nav-training'],
+    'interior': ['nav-interior'],
+    'marketing': ['nav-marketing', 'nav-branding', 'nav-influencer', 'nav-operations', 'nav-opening', 'nav-active'],
+    'reports': ['nav-reports', 'nav-performance']
+  };
+
+  Object.keys(moduleNavMap).forEach(modKey => {
+    const modPerm = perms[modKey] || {};
+    const canView = !!modPerm.view;
+    const navIds = moduleNavMap[modKey];
+
+    navIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.style.display = canView ? 'block' : 'none';
+      }
+    });
+  });
+
+  // Hide empty categories
+  document.querySelectorAll('#sidebar .nav-category').forEach(cat => {
+    const visibleItems = cat.querySelectorAll('.submenu li[style*="display: block"], .submenu li:not([style*="display: none"])');
+    cat.style.display = visibleItems.length > 0 ? 'block' : 'none';
+  });
 }
 
 
