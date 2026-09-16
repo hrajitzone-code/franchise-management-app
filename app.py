@@ -227,10 +227,38 @@ def permission_required(module, action):
 
 def scope_query_by_user(query, model):
     user = get_current_user()
-    if user and user.role != 'Super Admin' and user.franchise_id:
-        if hasattr(model, 'franchise_id'):
+    if user and user.role not in ['Super Admin', 'Admin'] and user.franchise_id:
+        if model == Franchise:
+            return query.filter(Franchise.id == user.franchise_id)
+        elif hasattr(model, 'franchise_id'):
             return query.filter(model.franchise_id == user.franchise_id)
     return query
+
+API_PERMISSION_MAP = {
+    '/api/franchises': ('leads', {'GET': 'view', 'POST': 'add'}),
+    '/api/franchise/': ('leads', {'GET': 'view', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/leads': ('leads', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/calls': ('calling', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/followups': ('followup', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/surveys': ('survey', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/tokens': ('payments', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/payments': ('payments', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/visit_expenses': ('visit', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/interior': ('interior', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/branding': ('marketing', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/marketing': ('marketing', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/training': ('training', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/operations': ('marketing', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/materials': ('purchase', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/purchases': ('purchase', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/gr_returns': ('gr', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/expenses': ('expenses', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/expense_categories': ('settings', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/company_support': ('payments', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/complaints': ('complaints', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+    '/api/reports/export': ('reports', {'GET': 'export'}),
+    '/api/users': ('user_management', {'GET': 'view', 'POST': 'add', 'PUT': 'edit', 'DELETE': 'delete'}),
+}
 
 _db_initialized = False
 
@@ -256,6 +284,33 @@ def initialize_database_lazily():
                 print(f"SQLite fallback failed: {e2}")
         finally:
             _db_initialized = True
+
+@app.before_request
+def enforce_rbac_api_permissions():
+    path = request.path
+    if not path.startswith('/api/') or path in ['/api/auth/login', '/api/index']:
+        return None
+        
+    u = get_current_user()
+    if not u:
+        return jsonify({'status': 'error', 'message': 'Unauthorized access. Please login.'}), 401
+        
+    if path in ['/api/auth/logout', '/api/auth/me', '/api/dashboard/stats']:
+        return None
+        
+    if path.startswith('/api/users'):
+        if u.role != 'Super Admin':
+            return jsonify({'status': 'error', 'message': 'Access denied. User Management requires Super Admin.'}), 403
+        return None
+        
+    for prefix, (module, action_map) in API_PERMISSION_MAP.items():
+        if path.startswith(prefix):
+            action = action_map.get(request.method, 'view')
+            if not u.has_permission(module, action):
+                return jsonify({'status': 'error', 'message': f"Permission denied for '{action}' action in '{module}' module."}), 403
+            break
+            
+    return None
 
 @app.errorhandler(500)
 def handle_500_error(e):
