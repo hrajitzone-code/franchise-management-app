@@ -819,6 +819,72 @@
   </div>
 </div>
 
+<!-- Create / Edit Role Modal -->
+<div id="role-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 3150; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
+  <div style="background: #FFFFFF; width: 780px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto;">
+    <button onclick="closeRoleModal()" style="position: absolute; right: 18px; top: 18px; background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #64748B;">&times;</button>
+    <h3 style="margin-top: 0; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-shield-halved" style="color: #8B5CF6;"></i> <span id="role-modal-title">Create / Edit Process Role</span>
+    </h3>
+    <p style="font-size: 0.85rem; color: #64748B; margin-bottom: 15px;">Configure role details and specify granular process permissions across all 16 modules.</p>
+
+    <form onsubmit="handleSaveRoleModal(event)">
+      <input type="hidden" id="role-form-id" value="">
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 15px;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Role Name *</label>
+          <input type="text" id="role-name-input" required placeholder="e.g. Regional Operations Lead" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Description</label>
+          <input type="text" id="role-desc-input" placeholder="e.g. Oversees regional franchise leads and store performance." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; background: #F8FAFC; padding: 10px; border-radius: 6px; border: 1px solid #E2E8F0;">
+        <span style="font-size: 0.82rem; color: #475569;"><i class="fa-solid fa-sliders" style="color:#8B5CF6;"></i> <strong>Process Permission Matrix</strong> (16 Modules &times; 6 Actions = 96 Total Permissions)</span>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" onclick="selectAllRolePermissions(true)" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer;">
+            Select All
+          </button>
+          <button type="button" onclick="selectAllRolePermissions(false)" style="padding: 4px 10px; font-size: 0.78rem; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer;">
+            Deselect All
+          </button>
+        </div>
+      </div>
+
+      <div style="overflow-y: auto; max-height: 48vh; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 15px;">
+        <table class="data-table" style="width: 100%; font-size: 0.82rem;">
+          <thead>
+            <tr style="background: #F1F5F9; position: sticky; top: 0; z-index: 10;">
+              <th style="width: 28%; padding: 10px 12px;">Module Name</th>
+              <th style="text-align: center; padding: 10px;">View</th>
+              <th style="text-align: center; padding: 10px;">Add</th>
+              <th style="text-align: center; padding: 10px;">Edit</th>
+              <th style="text-align: center; padding: 10px;">Delete</th>
+              <th style="text-align: center; padding: 10px;">Approve</th>
+              <th style="text-align: center; padding: 10px;">Export</th>
+            </tr>
+          </thead>
+          <tbody id="role-perms-tbody">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" onclick="closeRoleModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #8B5CF6; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-floppy-disk"></i> Save Role
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+
 <!-- Add New Franchise Modal -->
 <div id="add-franchise-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); z-index: 3100; align-items: center; justify-content: center; overflow-y: auto; padding: 20px 0;">
   <div style="background: #FFFFFF; width: 650px; max-width: 95%; border-radius: 12px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.25); position: relative; margin: auto;">

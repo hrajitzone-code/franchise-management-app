@@ -19,7 +19,7 @@ from models import (
     db, Franchise, Lead, CallHistory, FollowUp, TokenRecord, SurveyVersion, Payment,
     BrandingSetup, MarketingCampaign, TrainingRecord, StoreOperations, MaterialAsset,
     Purchase, GRReturn, ExpenseCategory, Expense, CompanySupport, Document, AuditLog,
-    ImportHistory, VisitExpense, User, Complaint
+    ImportHistory, VisitExpense, User, Complaint, Role
 )
 from services.report_service import generate_pdf_report, generate_excel_report, generate_word_report
 from services.storage_service import upload_file, get_file_url, is_supabase_configured
@@ -192,6 +192,71 @@ def seed_initial_team_users():
             u.set_password(udata["password"])
             db.session.add(u)
     db.session.commit()
+
+def seed_initial_roles():
+    system_roles = [
+        {
+            "name": "Super Admin",
+            "description": "Full system management, user provisioning, master control & unrestricted access across all modules.",
+            "is_system": True,
+            "permissions": User.get_default_permissions("Super Admin")
+        },
+        {
+            "name": "Admin",
+            "description": "Full access across operational & financial modules (excluding User Management).",
+            "is_system": True,
+            "permissions": User.get_default_permissions("Admin")
+        },
+        {
+            "name": "Manager",
+            "description": "Oversees day-to-day franchise execution, leads, operations, and approvals.",
+            "is_system": True,
+            "permissions": User.get_default_permissions("Manager")
+        },
+        {
+            "name": "Field Executive",
+            "description": "Field operations, lead surveys, calling, follow-ups, store setup, and training.",
+            "is_system": True,
+            "permissions": User.get_default_permissions("Field Executive")
+        },
+        {
+            "name": "Accountant",
+            "description": "Financial management: payments, expenses, purchase logs, goods return (GR), and financial reports.",
+            "is_system": True,
+            "permissions": User.get_default_permissions("Accountant")
+        },
+        {
+            "name": "Franchisee",
+            "description": "Franchise owner portal: survey, payments, expenses, purchases, GR, training, interior, and marketing.",
+            "is_system": True,
+            "permissions": User.get_default_permissions("Franchisee")
+        }
+    ]
+
+    for item in system_roles:
+        r = Role.query.filter_by(name=item["name"]).first()
+        if not r:
+            db.session.add(Role(
+                name=item["name"],
+                description=item["description"],
+                is_system=True,
+                permissions_json=json.dumps(item["permissions"])
+            ))
+        else:
+            r.is_system = True
+    db.session.commit()
+
+with app.app_context():
+    try:
+        db.create_all()
+        check_and_migrate_db()
+        seed_default_expense_categories()
+        seed_initial_roles()
+        seed_initial_team_users()
+        remove_demo_temporary_data()
+    except Exception as e:
+        print(f"DB startup initialization note: {e}")
+
 
 def get_current_user():
     user_id = session.get('user_id')
@@ -2513,6 +2578,164 @@ def delete_user(user_id):
     log_audit(fid, 'User Management', 'Delete User', current_user.full_name, old_value=f"{full_name} ({username})", remarks=f"User {username} deleted.")
 
     return jsonify({'status': 'success', 'message': f'User {full_name} deleted successfully!'})
+
+# --- ROLES & PERMISSIONS API ENDPOINTS ---
+
+@app.route('/api/roles', methods=['GET'])
+def get_roles():
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
+
+    roles = Role.query.order_by(Role.id.asc()).all()
+    if not roles:
+        seed_initial_roles()
+        roles = Role.query.order_by(Role.id.asc()).all()
+    return jsonify([r.to_dict() for r in roles])
+
+@app.route('/api/roles', methods=['POST'])
+def create_role():
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
+
+    data = request.json or request.form
+    name = str(data.get('name') or '').strip()
+    description = str(data.get('description') or '').strip()
+    permissions_data = data.get('permissions')
+
+    if not name:
+        return jsonify({'status': 'error', 'message': 'Role Name is required.'}), 400
+
+    existing = Role.query.filter(Role.name.ilike(name)).first()
+    if existing:
+        return jsonify({'status': 'error', 'message': f'Role "{name}" already exists.'}), 400
+
+    new_role = Role(
+        name=name,
+        description=description,
+        is_system=False,
+        permissions_json=json.dumps(permissions_data) if isinstance(permissions_data, dict) else json.dumps(User.get_default_permissions('Manager'))
+    )
+
+    db.session.add(new_role)
+    db.session.commit()
+
+    log_audit(None, 'User Management', 'Create Role', current_user.full_name, new_value=name, remarks=f"Custom role '{name}' created.")
+
+    return jsonify({
+        'status': 'success',
+        'message': f'Role "{name}" created successfully!',
+        'role': new_role.to_dict()
+    })
+
+@app.route('/api/roles/<int:role_id>', methods=['PUT'])
+def update_role(role_id):
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
+
+    r = Role.query.get_or_404(role_id)
+    data = request.json or request.form
+
+    if 'name' in data:
+        new_name = str(data['name']).strip()
+        if r.is_system and new_name != r.name:
+            return jsonify({'status': 'error', 'message': 'System role names cannot be renamed.'}), 400
+        if new_name and new_name != r.name:
+            existing = Role.query.filter(Role.name.ilike(new_name), Role.id != r.id).first()
+            if existing:
+                return jsonify({'status': 'error', 'message': f'Role name "{new_name}" is already taken.'}), 400
+            User.query.filter_by(role=r.name).update({User.role: new_name})
+            r.name = new_name
+
+    if 'description' in data:
+        r.description = str(data['description']).strip()
+
+    if 'permissions' in data and isinstance(data['permissions'], dict):
+        r.permissions_json = json.dumps(data['permissions'])
+
+    db.session.commit()
+    log_audit(None, 'User Management', 'Update Role', current_user.full_name, new_value=r.name, remarks=f"Role '{r.name}' updated.")
+
+    return jsonify({
+        'status': 'success',
+        'message': f'Role "{r.name}" updated successfully!',
+        'role': r.to_dict()
+    })
+
+@app.route('/api/roles/<int:role_id>/duplicate', methods=['POST'])
+def duplicate_role(role_id):
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
+
+    r = Role.query.get_or_404(role_id)
+    data = request.json or {}
+
+    new_name = str(data.get('name') or f"{r.name} (Copy)").strip()
+    existing = Role.query.filter(Role.name.ilike(new_name)).first()
+    if existing:
+        new_name = f"{new_name} {datetime.datetime.now().strftime('%H%M%S')}"
+
+    dup_role = Role(
+        name=new_name,
+        description=str(data.get('description') or f"Copy of {r.name} - {r.description or ''}").strip(),
+        is_system=False,
+        permissions_json=r.permissions_json or json.dumps(r.get_permissions())
+    )
+
+    db.session.add(dup_role)
+    db.session.commit()
+
+    log_audit(None, 'User Management', 'Duplicate Role', current_user.full_name, old_value=r.name, new_value=new_name, remarks=f"Role '{r.name}' duplicated to '{new_name}'.")
+
+    return jsonify({
+        'status': 'success',
+        'message': f'Role duplicated as "{new_name}"!',
+        'role': dup_role.to_dict()
+    })
+
+@app.route('/api/roles/<int:role_id>/reset', methods=['POST'])
+def reset_role(role_id):
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
+
+    r = Role.query.get_or_404(role_id)
+    r.permissions_json = json.dumps(User.get_default_permissions(r.name))
+    db.session.commit()
+
+    log_audit(None, 'User Management', 'Reset Role', current_user.full_name, new_value=r.name, remarks=f"Role '{r.name}' permissions reset to default.")
+
+    return jsonify({
+        'status': 'success',
+        'message': f'Permissions for role "{r.name}" reset to default!',
+        'role': r.to_dict()
+    })
+
+@app.route('/api/roles/<int:role_id>', methods=['DELETE'])
+def delete_role(role_id):
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
+
+    r = Role.query.get_or_404(role_id)
+    if r.is_system:
+        return jsonify({'status': 'error', 'message': 'System roles cannot be deleted.'}), 400
+
+    user_count = User.query.filter_by(role=r.name).count()
+    if user_count > 0:
+        return jsonify({'status': 'error', 'message': f'Cannot delete role "{r.name}" because {user_count} user(s) are assigned to it. Reassign users first.'}), 400
+
+    name = r.name
+    db.session.delete(r)
+    db.session.commit()
+
+    log_audit(None, 'User Management', 'Delete Role', current_user.full_name, old_value=name, remarks=f"Custom role '{name}' deleted.")
+
+    return jsonify({'status': 'success', 'message': f'Role "{name}" deleted successfully!'})
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050, debug=True)

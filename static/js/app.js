@@ -1920,93 +1920,198 @@ const DEFAULT_ROLE_PERMISSIONS = {
   }
 };
 
-function renderUsersWorkspace(container) {
+let activeUserSubTab = 'users';
+let allUsersList = [];
+let allRolesList = [];
+let currentEditingRole = null;
+
+async function loadRolesList() {
+  try {
+    const res = await fetch('/api/roles');
+    if (res.status === 403) {
+      allRolesList = [];
+      return;
+    }
+    allRolesList = await res.json();
+    populateRoleDropdowns();
+  } catch (err) {
+    console.error('Error loading roles list:', err);
+  }
+}
+
+function populateRoleDropdowns() {
+  const filterSelect = document.getElementById('users-filter-role');
+  if (filterSelect) {
+    const currentVal = filterSelect.value;
+    filterSelect.innerHTML = `<option value="">All Roles</option>` +
+      allRolesList.map(r => `<option value="${r.name}" ${r.name === currentVal ? 'selected' : ''}>${r.name}</option>`).join('');
+  }
+
+  const modalSelect = document.getElementById('user-role');
+  if (modalSelect) {
+    const currentVal = modalSelect.value || 'Manager';
+    modalSelect.innerHTML = allRolesList.map(r => `<option value="${r.name}" ${r.name === currentVal ? 'selected' : ''}>${r.name} ${r.is_system ? '(System Role)' : '(Custom Role)'}</option>`).join('');
+  }
+}
+
+async function renderUsersWorkspace(container) {
+  await loadRolesList();
+
   container.innerHTML = `
-    <!-- Stat Pills Header -->
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px;">
-      <div class="kpi-card" style="padding: 15px;">
-        <div class="kpi-info">
-          <h4 style="font-size: 0.8rem; color: #64748B;">Total Users</h4>
-          <p id="users-stat-total" style="font-size: 1.4rem; font-weight: 700; color: #0F172A; margin: 4px 0 0 0;">0</p>
+    <!-- Top System & Master Settings Header Banner -->
+    <div style="background: #FFFFFF; padding: 20px 24px; border-radius: 12px; border: 1px solid #E2E8F0; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+        <div>
+          <h2 style="margin: 0 0 6px 0; font-size: 1.35rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 10px;">
+            <i class="fa-solid fa-gear" style="color: #2563EB;"></i> System & Master Settings
+          </h2>
+          <p style="margin: 0; font-size: 0.85rem; color: #64748B;">Manage franchise user accounts, role definitions, and process-level permissions matrix.</p>
         </div>
-        <div class="kpi-icon icon-blue"><i class="fa-solid fa-users"></i></div>
       </div>
-      <div class="kpi-card" style="padding: 15px;">
-        <div class="kpi-info">
-          <h4 style="font-size: 0.8rem; color: #64748B;">Active Users</h4>
-          <p id="users-stat-active" style="font-size: 1.4rem; font-weight: 700; color: #16A34A; margin: 4px 0 0 0;">0</p>
-        </div>
-        <div class="kpi-icon icon-green"><i class="fa-solid fa-user-check"></i></div>
-      </div>
-      <div class="kpi-card" style="padding: 15px;">
-        <div class="kpi-info">
-          <h4 style="font-size: 0.8rem; color: #64748B;">Admins & Managers</h4>
-          <p id="users-stat-managers" style="font-size: 1.4rem; font-weight: 700; color: #2563EB; margin: 4px 0 0 0;">0</p>
-        </div>
-        <div class="kpi-icon icon-purple"><i class="fa-solid fa-user-gear"></i></div>
-      </div>
-      <div class="kpi-card" style="padding: 15px;">
-        <div class="kpi-info">
-          <h4 style="font-size: 0.8rem; color: #64748B;">Field & Franchisees</h4>
-          <p id="users-stat-field" style="font-size: 1.4rem; font-weight: 700; color: #D97706; margin: 4px 0 0 0;">0</p>
-        </div>
-        <div class="kpi-icon icon-orange"><i class="fa-solid fa-store"></i></div>
+
+      <!-- Top Sub-Tabs Bar -->
+      <div style="display: flex; gap: 8px; border-bottom: 2px solid #E2E8F0; padding-bottom: 2px;">
+        <button id="user-subtab-users-btn" onclick="switchUserSubTab('users')" style="padding: 10px 20px; font-weight: 600; font-size: 0.88rem; border: none; background: ${activeUserSubTab === 'users' ? '#0F172A' : 'transparent'}; color: ${activeUserSubTab === 'users' ? '#FFFFFF' : '#64748B'}; border-radius: 8px 8px 0 0; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s;">
+          <i class="fa-solid fa-users"></i> Users Register (<span id="count-users-tab">0</span>)
+        </button>
+        <button id="user-subtab-roles-btn" onclick="switchUserSubTab('roles')" style="padding: 10px 20px; font-weight: 600; font-size: 0.88rem; border: none; background: ${activeUserSubTab === 'roles' ? '#0F172A' : 'transparent'}; color: ${activeUserSubTab === 'roles' ? '#FFFFFF' : '#64748B'}; border-radius: 8px 8px 0 0; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s;">
+          <i class="fa-solid fa-shield-halved"></i> Roles & Permissions (<span id="count-roles-tab">${allRolesList.length}</span>)
+        </button>
       </div>
     </div>
 
-    <!-- Filter Bar -->
-    <div style="background: #F8FAFC; padding: 15px; border-radius: 10px; border: 1px solid #E2E8F0; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-      <input type="text" id="users-filter-search" oninput="debounce(loadUsers, 300)()" placeholder="Search name, email, mobile, department..." style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; width: 260px;">
-
-      <select id="users-filter-role" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
-        <option value="">All Roles</option>
-        <option value="Admin">Admin</option>
-        <option value="Manager">Manager</option>
-        <option value="Field Executive">Field Executive</option>
-        <option value="Accountant">Accountant</option>
-        <option value="Franchisee">Franchisee</option>
-      </select>
-
-      <select id="users-filter-status" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
-        <option value="">All Status</option>
-        <option value="active">Active Only</option>
-        <option value="inactive">Inactive Only</option>
-      </select>
-
-      <select id="users-filter-franchise" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
-        <option value="">All Franchises</option>
-        ${allFranchisesList.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
-      </select>
-
-      <button class="btn-ref-explore" onclick="openNewUserModal()" style="width: auto; padding: 6px 16px; margin-left: auto; background: #2563EB;">
-        <i class="fa-solid fa-user-plus"></i> Create New User
-      </button>
+    <!-- Subtab Content Area -->
+    <div id="user-subtab-content">
+      ${activeUserSubTab === 'users' ? getUsersRegisterTabHTML() : getRolesRegisterTabHTML()}
     </div>
+  `;
 
-    <!-- Users Data Table -->
-    <div style="background: #FFFFFF; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-      <div style="overflow-x: auto;">
+  if (activeUserSubTab === 'users') {
+    loadUsers();
+  } else {
+    renderRolesTable(allRolesList);
+  }
+}
+
+function switchUserSubTab(tabName) {
+  activeUserSubTab = tabName;
+  const usersBtn = document.getElementById('user-subtab-users-btn');
+  const rolesBtn = document.getElementById('user-subtab-roles-btn');
+  const content = document.getElementById('user-subtab-content');
+
+  if (usersBtn && rolesBtn && content) {
+    if (tabName === 'users') {
+      usersBtn.style.background = '#0F172A';
+      usersBtn.style.color = '#FFFFFF';
+      rolesBtn.style.background = 'transparent';
+      rolesBtn.style.color = '#64748B';
+      content.innerHTML = getUsersRegisterTabHTML();
+      loadUsers();
+    } else {
+      rolesBtn.style.background = '#0F172A';
+      rolesBtn.style.color = '#FFFFFF';
+      usersBtn.style.background = 'transparent';
+      usersBtn.style.color = '#64748B';
+      content.innerHTML = getRolesRegisterTabHTML();
+      loadRolesList().then(() => renderRolesTable(allRolesList));
+    }
+  }
+}
+
+function getUsersRegisterTabHTML() {
+  return `
+    <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+          <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-user-gear" style="color: #10B981;"></i> Internal User Accounts Register
+          </h3>
+          <p style="margin: 4px 0 0 0; font-size: 0.82rem; color: #64748B;">Authorized franchise managers, executives, accountants, and administrators. No self-registration.</p>
+        </div>
+        <button onclick="openNewUserModal()" style="padding: 8px 18px; border-radius: 8px; border: none; background: #10B981; color: #FFFFFF; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-plus"></i> ADD USER
+        </button>
+      </div>
+
+      <!-- Filter Controls -->
+      <div style="background: #F8FAFC; padding: 12px 15px; border-radius: 8px; border: 1px solid #E2E8F0; margin-bottom: 16px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="users-filter-search" oninput="debounce(loadUsers, 300)()" placeholder="Search name, email, mobile..." style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; width: 240px;">
+
+        <select id="users-filter-role" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="">All Roles</option>
+          ${allRolesList.map(r => `<option value="${r.name}">${r.name}</option>`).join('')}
+        </select>
+
+        <select id="users-filter-status" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="">All Status</option>
+          <option value="active">Active Only</option>
+          <option value="inactive">Inactive Only</option>
+        </select>
+
+        <select id="users-filter-franchise" onchange="loadUsers()" style="padding: 6px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="">All Franchises</option>
+          ${allFranchisesList.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+        </select>
+      </div>
+
+      <!-- Users Table -->
+      <div style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 8px;">
         <table class="data-table" style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">
           <thead>
-            <tr style="background: #F1F5F9; color: #475569; text-align: left;">
-              <th style="padding: 12px 15px;">User Info</th>
-              <th style="padding: 12px 15px;">Role</th>
-              <th style="padding: 12px 15px;">Assigned Franchise</th>
-              <th style="padding: 12px 15px;">Department</th>
-              <th style="padding: 12px 15px;">Status</th>
-              <th style="padding: 12px 15px;">Last Login</th>
-              <th style="padding: 12px 15px; text-align: right;">Actions</th>
+            <tr style="background: #F8FAFC; color: #475569; text-align: left; border-bottom: 1px solid #E2E8F0;">
+              <th style="padding: 12px 15px; font-weight: 700;">NAME</th>
+              <th style="padding: 12px 15px; font-weight: 700;">WORK EMAIL</th>
+              <th style="padding: 12px 15px; font-weight: 700;">ROLE</th>
+              <th style="padding: 12px 15px; font-weight: 700;">STATUS</th>
+              <th style="padding: 12px 15px; font-weight: 700;">LAST LOGIN</th>
+              <th style="padding: 12px 15px; font-weight: 700;">CREATED DATE</th>
+              <th style="padding: 12px 15px; font-weight: 700; text-align: right;">ACTIONS</th>
             </tr>
           </thead>
           <tbody id="users-table-tbody">
-            <tr><td colspan="7" style="text-align: center; padding: 20px; color: #64748B;">Loading users list...</td></tr>
+            <tr><td colspan="7" style="text-align: center; padding: 25px; color: #64748B;">Loading users register...</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   `;
+}
 
-  loadUsers();
+function getRolesRegisterTabHTML() {
+  return `
+    <div style="background: #FFFFFF; border-radius: 12px; border: 1px solid #E2E8F0; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <div>
+          <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-shield-halved" style="color: #8B5CF6;"></i> Roles & Process Permissions Register
+          </h3>
+          <p style="margin: 4px 0 0 0; font-size: 0.82rem; color: #64748B;">Configure process-level access for Super Admin, Admin, Manager, Field Executive, Accountant, Franchisee, and custom roles.</p>
+        </div>
+        <button onclick="openCreateRoleModal()" style="padding: 8px 18px; border-radius: 8px; border: none; background: #8B5CF6; color: #FFFFFF; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-plus"></i> CREATE ROLE
+        </button>
+      </div>
+
+      <!-- Roles Table -->
+      <div style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 8px;">
+        <table class="data-table" style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #F8FAFC; color: #475569; text-align: left; border-bottom: 1px solid #E2E8F0;">
+              <th style="padding: 12px 15px; font-weight: 700; width: 22%;">ROLE NAME</th>
+              <th style="padding: 12px 15px; font-weight: 700; width: 35%;">DESCRIPTION</th>
+              <th style="padding: 12px 15px; font-weight: 700;">ASSIGNED USERS</th>
+              <th style="padding: 12px 15px; font-weight: 700;">PERMISSIONS</th>
+              <th style="padding: 12px 15px; font-weight: 700;">STATUS</th>
+              <th style="padding: 12px 15px; font-weight: 700; text-align: right;">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody id="roles-table-tbody">
+            <tr><td colspan="6" style="text-align: center; padding: 25px; color: #64748B;">Loading roles & permissions register...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
 async function loadUsers() {
@@ -2020,29 +2125,20 @@ async function loadUsers() {
   try {
     const res = await fetch(`/api/users?${queryParams.toString()}`);
     if (res.status === 403) {
-      document.getElementById('users-table-tbody').innerHTML = `
-        <tr><td colspan="7" style="text-align: center; padding: 30px; color: #DC2626; font-weight: 600;">
-          <i class="fa-solid fa-lock" style="font-size: 1.5rem; display: block; margin-bottom: 8px;"></i>
-          Access Restricted: User Management section is accessible only to Admin users.
-        </td></tr>
-      `;
+      const tbody = document.getElementById('users-table-tbody');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr><td colspan="7" style="text-align: center; padding: 30px; color: #DC2626; font-weight: 600;">
+            <i class="fa-solid fa-lock" style="font-size: 1.5rem; display: block; margin-bottom: 8px;"></i>
+            Access Restricted: User Management section is accessible only to Super Admin users.
+          </td></tr>
+        `;
+      }
       return;
     }
 
     const users = await res.json();
     allUsersList = users;
-
-    // Update KPI pills
-    const total = users.length;
-    const active = users.filter(u => u.is_active).length;
-    const managers = users.filter(u => ['Admin', 'Manager'].includes(u.role)).length;
-    const field = users.filter(u => ['Field Executive', 'Franchisee'].includes(u.role)).length;
-
-    if (document.getElementById('users-stat-total')) document.getElementById('users-stat-total').innerText = total;
-    if (document.getElementById('users-stat-active')) document.getElementById('users-stat-active').innerText = active;
-    if (document.getElementById('users-stat-managers')) document.getElementById('users-stat-managers').innerText = managers;
-    if (document.getElementById('users-stat-field')) document.getElementById('users-stat-field').innerText = field;
-
     renderUsersTable(users);
   } catch (err) {
     console.error('Error loading users:', err);
@@ -2051,6 +2147,8 @@ async function loadUsers() {
 
 function renderUsersTable(users) {
   const tbody = document.getElementById('users-table-tbody');
+  const tabCount = document.getElementById('count-users-tab');
+  if (tabCount && users) tabCount.innerText = users.length;
   if (!tbody) return;
 
   if (!users || users.length === 0) {
@@ -2058,42 +2156,43 @@ function renderUsersTable(users) {
     return;
   }
 
-  tbody.innerHTML = users.map(u => {
-    const roleColors = {
-      'Admin': 'background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5;',
-      'Manager': 'background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD;',
-      'Field Executive': 'background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D;',
-      'Accountant': 'background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7;',
-      'Franchisee': 'background: #F3E8FF; color: #6B21A8; border: 1px solid #D8B4FE;'
-    };
+  const roleStyles = {
+    'Super Admin': 'background: #F3E8FF; color: #6B21A8;',
+    'Administrator': 'background: #F3E8FF; color: #6B21A8;',
+    'Admin': 'background: #FEE2E2; color: #991B1B;',
+    'Manager': 'background: #DBEAFE; color: #1E40AF;',
+    'Field Executive': 'background: #DCFCE7; color: #166534;',
+    'Accountant': 'background: #FEF3C7; color: #92400E;',
+    'Franchisee': 'background: #FFEDD5; color: #C2410C;'
+  };
 
+  tbody.innerHTML = users.map(u => {
+    const initials = (u.full_name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    const style = roleStyles[u.role] || 'background: #E2E8F0; color: #334155;';
     const statusBadge = u.is_active
-      ? `<span style="background: #DCFCE7; color: #166534; padding: 3px 10px; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 4px;"></i> Active</span>`
-      : `<span style="background: #F3F4F6; color: #4B5563; padding: 3px 10px; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 4px;"></i> Inactive</span>`;
+      ? `<span style="background: #DCFCE7; color: #15803D; padding: 3px 10px; border-radius: 9999px; font-weight: 700; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle" style="font-size: 0.45rem;"></i> ACTIVE</span>`
+      : `<span style="background: #F3F4F6; color: #6B7280; padding: 3px 10px; border-radius: 9999px; font-weight: 700; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 4px;"><i class="fa-solid fa-circle" style="font-size: 0.45rem;"></i> INACTIVE</span>`;
 
     return `
       <tr style="border-bottom: 1px solid #F1F5F9;">
         <td style="padding: 12px 15px;">
-          <div style="font-weight: 600; color: #0F172A;">${u.full_name}</div>
-          <div style="font-size: 0.78rem; color: #64748B;"><i class="fa-regular fa-envelope"></i> ${u.username} ${u.mobile ? `| <i class="fa-solid fa-phone"></i> ${u.mobile}` : ''}</div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: #E2E8F0; color: #475569; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem;">${initials}</div>
+            <div>
+              <div style="font-weight: 700; color: #0F172A;">${u.full_name}</div>
+              <div style="font-size: 0.76rem; color: #94A3B8;">${u.mobile ? `${u.mobile}` : ''}</div>
+            </div>
+          </div>
         </td>
+        <td style="padding: 12px 15px; color: #334155; font-family: monospace; font-size: 0.82rem;">${u.username}</td>
         <td style="padding: 12px 15px;">
-          <span style="padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; ${roleColors[u.role] || ''}">
-            ${u.role}
+          <span style="padding: 4px 10px; border-radius: 9999px; font-weight: 600; font-size: 0.76rem; display: inline-flex; align-items: center; gap: 4px; ${style}">
+            <i class="fa-solid fa-shield-halved" style="font-size: 0.7rem;"></i> ${u.role}
           </span>
         </td>
-        <td style="padding: 12px 15px; color: #334155;">
-          <i class="fa-solid fa-store text-muted"></i> ${u.franchise_name || 'All Franchises'}
-        </td>
-        <td style="padding: 12px 15px; color: #475569;">
-          ${u.department || '<span style="color: #94A3B8;">N/A</span>'}
-        </td>
-        <td style="padding: 12px 15px;">
-          ${statusBadge}
-        </td>
-        <td style="padding: 12px 15px; font-size: 0.8rem; color: #64748B;">
-          ${u.last_login || 'Never'}
-        </td>
+        <td style="padding: 12px 15px;">${statusBadge}</td>
+        <td style="padding: 12px 15px; font-size: 0.8rem; color: #64748B;">${u.last_login || '-'}</td>
+        <td style="padding: 12px 15px; font-size: 0.8rem; color: #64748B;">${u.created_at ? u.created_at.split(' ')[0] : '-'}</td>
         <td style="padding: 12px 15px; text-align: right; white-space: nowrap;">
           <button onclick="openEditUserModal(${u.id})" title="Edit User & Permissions" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; color: #2563EB; font-size: 0.8rem; margin-right: 4px;">
             <i class="fa-solid fa-pen-to-square"></i> Edit
@@ -2112,6 +2211,69 @@ function renderUsersTable(users) {
     `;
   }).join('');
 }
+
+function renderRolesTable(roles) {
+  const tbody = document.getElementById('roles-table-tbody');
+  const tabCount = document.getElementById('count-roles-tab');
+  if (tabCount && roles) tabCount.innerText = roles.length;
+  if (!tbody) return;
+
+  if (!roles || roles.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 25px; color: #64748B;">No process roles found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = roles.map(r => {
+    const sysBadge = r.is_system
+      ? `<span style="background: #E2E8F0; color: #475569; padding: 2px 6px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; margin-left: 6px;">SYSTEM ROLE</span>`
+      : '';
+
+    const permText = r.total_actions === 96
+      ? `ALL 96 PERMISSIONS`
+      : `${r.total_actions} actions`;
+
+    return `
+      <tr style="border-bottom: 1px solid #F1F5F9;">
+        <td style="padding: 12px 15px;">
+          <div style="font-weight: 700; color: #0F172A; display: flex; align-items: center;">
+            ${r.name} ${sysBadge}
+          </div>
+        </td>
+        <td style="padding: 12px 15px; color: #64748B; font-size: 0.82rem;">${r.description || 'Custom defined process role.'}</td>
+        <td style="padding: 12px 15px;">
+          <span style="background: #F1F5F9; color: #475569; padding: 3px 10px; border-radius: 6px; font-weight: 600; font-size: 0.78rem;">
+            ${r.user_count} ${r.user_count === 1 ? 'user' : 'users'}
+          </span>
+        </td>
+        <td style="padding: 12px 15px;">
+          <span style="background: #F3E8FF; color: #6B21A8; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.75rem;">
+            ${permText}
+          </span>
+        </td>
+        <td style="padding: 12px 15px;">
+          <span style="background: #DCFCE7; color: #15803D; padding: 3px 10px; border-radius: 9999px; font-weight: 700; font-size: 0.72rem; display: inline-flex; align-items: center; gap: 4px;">
+            <i class="fa-solid fa-circle" style="font-size: 0.45rem;"></i> ACTIVE
+          </span>
+        </td>
+        <td style="padding: 12px 15px; text-align: right; white-space: nowrap;">
+          <button onclick="openEditRoleModal(${r.id})" title="Edit Role & Permissions" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; color: #2563EB; font-size: 0.8rem; margin-right: 4px;">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          <button onclick="duplicateRole(${r.id})" title="Duplicate Role" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; color: #475569; font-size: 0.8rem; margin-right: 4px;">
+            <i class="fa-regular fa-copy"></i>
+          </button>
+          <button onclick="resetRolePermissions(${r.id})" title="Reset Role Permissions" style="padding: 4px 8px; border-radius: 4px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; color: #D97706; font-size: 0.8rem; margin-right: 4px;">
+            <i class="fa-solid fa-rotate-left"></i>
+          </button>
+          <button onclick="deleteRole(${r.id})" title="${r.is_system ? 'System roles cannot be deleted' : 'Delete Role'}" style="padding: 4px 8px; border-radius: 4px; border: 1px solid ${r.is_system ? '#CBD5E1' : '#FCA5A5'}; background: ${r.is_system ? '#F1F5F9' : '#FEF2F2'}; cursor: ${r.is_system ? 'not-allowed' : 'pointer'}; color: ${r.is_system ? '#94A3B8' : '#DC2626'}; font-size: 0.8rem;" ${r.is_system ? 'disabled' : ''}>
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
 
 function openNewUserModal() {
   currentEditingUser = null;
@@ -2405,6 +2567,185 @@ async function deleteUser(userId, userName) {
     console.error('Error deleting user:', err);
   }
 }
+
+// --- ROLE MANAGEMENT MODALS & PERMISSIONS MATRIX ---
+
+function renderRolePermissionsMatrixTable(customPermissions) {
+  const tbody = document.getElementById('role-perms-tbody');
+  if (!tbody) return;
+
+  const actions = ['view', 'add', 'edit', 'delete', 'approve', 'export'];
+
+  tbody.innerHTML = ALL_MODULES.map(mod => {
+    let modPerms = {};
+    if (customPermissions && customPermissions[mod.key]) {
+      modPerms = customPermissions[mod.key];
+    } else {
+      actions.forEach(a => modPerms[a] = (a !== 'delete'));
+    }
+
+    const checkboxesHtml = actions.map(action => `
+      <td style="text-align: center; padding: 8px;">
+        <input type="checkbox" id="role_perm_${mod.key}_${action}" data-module="${mod.key}" data-action="${action}" ${modPerms[action] ? 'checked' : ''} style="cursor: pointer; width: 16px; height: 16px;">
+      </td>
+    `).join('');
+
+    return `
+      <tr style="border-bottom: 1px solid #F1F5F9;">
+        <td style="padding: 8px 12px; font-weight: 600; color: #1E293B;">${mod.name}</td>
+        ${checkboxesHtml}
+      </tr>
+    `;
+  }).join('');
+}
+
+function selectAllRolePermissions(state) {
+  ALL_MODULES.forEach(mod => {
+    ['view', 'add', 'edit', 'delete', 'approve', 'export'].forEach(action => {
+      const cb = document.getElementById(`role_perm_${mod.key}_${action}`);
+      if (cb) cb.checked = state;
+    });
+  });
+}
+
+function openCreateRoleModal() {
+  currentEditingRole = null;
+  document.getElementById('role-form-id').value = '';
+  document.getElementById('role-modal-title').innerText = 'Create New Process Role';
+  const nameInput = document.getElementById('role-name-input');
+  nameInput.value = '';
+  nameInput.disabled = false;
+  document.getElementById('role-desc-input').value = '';
+
+  renderRolePermissionsMatrixTable(null);
+  document.getElementById('role-modal').style.display = 'flex';
+}
+
+function openEditRoleModal(roleId) {
+  const r = allRolesList.find(x => x.id === roleId);
+  if (!r) return;
+
+  currentEditingRole = r;
+  document.getElementById('role-form-id').value = r.id;
+  document.getElementById('role-modal-title').innerText = `Edit Role: ${r.name}`;
+  const nameInput = document.getElementById('role-name-input');
+  nameInput.value = r.name;
+  nameInput.disabled = r.is_system;
+  document.getElementById('role-desc-input').value = r.description || '';
+
+  renderRolePermissionsMatrixTable(r.permissions);
+  document.getElementById('role-modal').style.display = 'flex';
+}
+
+function closeRoleModal() {
+  document.getElementById('role-modal').style.display = 'none';
+}
+
+async function handleSaveRoleModal(e) {
+  e.preventDefault();
+
+  const roleId = document.getElementById('role-form-id').value;
+  const name = document.getElementById('role-name-input').value.trim();
+  const description = document.getElementById('role-desc-input').value.trim();
+
+  const permissions = {};
+  ALL_MODULES.forEach(mod => {
+    permissions[mod.key] = {};
+    ['view', 'add', 'edit', 'delete', 'approve', 'export'].forEach(action => {
+      const cb = document.getElementById(`role_perm_${mod.key}_${action}`);
+      permissions[mod.key][action] = cb ? cb.checked : false;
+    });
+  });
+
+  const payload = { name, description, permissions };
+  const url = roleId ? `/api/roles/${roleId}` : '/api/roles';
+  const method = roleId ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(data.message || 'Role saved successfully!');
+      closeRoleModal();
+      await loadRolesList();
+      if (activeUserSubTab === 'roles') {
+        renderRolesTable(allRolesList);
+      }
+    } else {
+      alert(data.message || data.error || 'Failed to save role.');
+    }
+  } catch (err) {
+    console.error('Error saving role:', err);
+    alert('An unexpected error occurred while saving role.');
+  }
+}
+
+async function duplicateRole(roleId) {
+  const r = allRolesList.find(x => x.id === roleId);
+  const newName = prompt(`Duplicate role "${r ? r.name : ''}" as:`, r ? `${r.name} (Copy)` : '');
+  if (!newName) return;
+
+  try {
+    const res = await fetch(`/api/roles/${roleId}/duplicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newName })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(data.message || 'Role duplicated successfully!');
+      await loadRolesList();
+      if (activeUserSubTab === 'roles') renderRolesTable(allRolesList);
+    } else {
+      alert(data.message || data.error || 'Failed to duplicate role.');
+    }
+  } catch (err) {
+    console.error('Error duplicating role:', err);
+  }
+}
+
+async function resetRolePermissions(roleId) {
+  const r = allRolesList.find(x => x.id === roleId);
+  if (!confirm(`Are you sure you want to reset default permissions for role "${r ? r.name : ''}"?`)) return;
+
+  try {
+    const res = await fetch(`/api/roles/${roleId}/reset`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(data.message || 'Role permissions reset to default!');
+      await loadRolesList();
+      if (activeUserSubTab === 'roles') renderRolesTable(allRolesList);
+    } else {
+      alert(data.message || data.error || 'Failed to reset role.');
+    }
+  } catch (err) {
+    console.error('Error resetting role permissions:', err);
+  }
+}
+
+async function deleteRole(roleId) {
+  const r = allRolesList.find(x => x.id === roleId);
+  if (!confirm(`Are you sure you want to delete custom role "${r ? r.name : ''}"?`)) return;
+
+  try {
+    const res = await fetch(`/api/roles/${roleId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      alert(data.message || 'Role deleted successfully!');
+      await loadRolesList();
+      if (activeUserSubTab === 'roles') renderRolesTable(allRolesList);
+    } else {
+      alert(data.message || data.error || 'Failed to delete role.');
+    }
+  } catch (err) {
+    console.error('Error deleting role:', err);
+  }
+}
+
 
 // --- AUTHENTICATION & PERMISSIONS ENFORCEMENT ---
 

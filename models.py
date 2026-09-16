@@ -764,6 +764,12 @@ class User(db.Model):
                 return json.loads(self.permissions_json)
             except Exception:
                 pass
+        try:
+            r = Role.query.filter_by(name=self.role).first()
+            if r and r.permissions_json:
+                return json.loads(r.permissions_json)
+        except Exception:
+            pass
         return self.get_default_permissions(self.role)
 
     @staticmethod
@@ -849,5 +855,42 @@ class User(db.Model):
             'permissions': self.get_permissions(),
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
+
+
+class Role(db.Model):
+    __tablename__ = 'roles'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    is_system = db.Column(db.Boolean, default=False)
+    permissions_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def get_permissions(self):
+        if self.permissions_json:
+            try:
+                return json.loads(self.permissions_json)
+            except Exception:
+                pass
+        return User.get_default_permissions(self.name)
+
+    def to_dict(self):
+        user_count = User.query.filter_by(role=self.name).count()
+        perms = self.get_permissions()
+        total_actions = 0
+        for mod, act_dict in perms.items():
+            if isinstance(act_dict, dict):
+                total_actions += sum(1 for v in act_dict.values() if v)
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description or '',
+            'is_system': self.is_system,
+            'user_count': user_count,
+            'total_actions': total_actions,
+            'permissions': perms,
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
 
 
