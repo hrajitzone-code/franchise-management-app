@@ -1921,7 +1921,6 @@ const DEFAULT_ROLE_PERMISSIONS = {
 };
 
 let activeUserSubTab = 'users';
-let allUsersList = [];
 let allRolesList = [];
 let currentEditingRole = null;
 
