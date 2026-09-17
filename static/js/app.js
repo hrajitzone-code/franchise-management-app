@@ -2799,13 +2799,15 @@ function showLoginScreen() {
 }
 
 function quickLogin(username, password) {
-  document.getElementById('login-username').value = username;
-  document.getElementById('login-password').value = password;
-  handleLoginSubmit(new Event('submit'));
+  const uInput = document.getElementById('login-username');
+  const pInput = document.getElementById('login-password');
+  if (uInput) uInput.value = username;
+  if (pInput) pInput.value = password;
+  handleLoginSubmit();
 }
 
 async function handleLoginSubmit(e) {
-  if (e) e.preventDefault();
+  if (e && typeof e.preventDefault === 'function') e.preventDefault();
   const username = document.getElementById('login-username')?.value.trim();
   const password = document.getElementById('login-password')?.value.trim();
   const errorAlert = document.getElementById('login-error-alert');
