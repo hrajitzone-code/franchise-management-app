@@ -363,14 +363,14 @@ def initialize_database_lazily():
 @app.before_request
 def enforce_rbac_api_permissions():
     path = request.path
-    if not path.startswith('/api/') or path in ['/api/auth/login', '/api/index']:
+    if not path.startswith('/api/') or path in ['/api/auth/login', '/api/auth/me', '/api/auth/logout', '/api/index']:
         return None
         
     u = get_current_user()
     if not u:
         return jsonify({'status': 'error', 'message': 'Unauthorized access. Please login.'}), 401
         
-    if path in ['/api/auth/logout', '/api/auth/me', '/api/dashboard/stats']:
+    if path == '/api/dashboard/stats':
         return None
         
     if path.startswith('/api/users'):
