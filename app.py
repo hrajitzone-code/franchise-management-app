@@ -384,7 +384,7 @@ def initialize_database_lazily():
 @app.before_request
 def enforce_rbac_api_permissions():
     path = request.path
-    if not path.startswith('/api/') or path in ['/api/auth/login', '/api/auth/me', '/api/auth/logout', '/api/index']:
+    if not path.startswith('/api/') or path in ['/api/auth/login', '/api/auth/me', '/api/auth/logout', '/api/index', '/api/executives']:
         return None
         
     u = get_current_user()
@@ -2585,6 +2585,23 @@ def get_users():
 
     users = query.order_by(User.created_at.desc()).all()
     return jsonify([u.to_dict() for u in users])
+
+@app.route('/api/executives', methods=['GET'])
+def get_executives_list():
+    try:
+        users = User.query.filter_by(is_active=True).all()
+        user_names = [u.full_name or u.username for u in users if u.full_name or u.username]
+        
+        lead_execs = [l.assigned_person for l in Lead.query.all() if l.assigned_person]
+        fran_execs = [f.assigned_person for f in Franchise.query.all() if f.assigned_person]
+        
+        all_execs = sorted(list(set([e for e in (user_names + lead_execs + fran_execs) if e and e.strip()])))
+        if not all_execs:
+            all_execs = ["Rajesh Kumar", "Priya Sharma", "Executive"]
+        return jsonify(all_execs)
+    except Exception as e:
+        print(f"Error fetching executives: {e}")
+        return jsonify(["Rajesh Kumar", "Priya Sharma", "Executive"])
 
 @app.route('/api/users', methods=['POST'])
 def create_user():

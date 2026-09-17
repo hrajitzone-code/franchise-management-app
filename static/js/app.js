@@ -476,15 +476,22 @@ function updateLeadKPIs() {
   if (document.getElementById('lead-kpi-converted')) document.getElementById('lead-kpi-converted').innerText = converted;
 }
 
-function populateExecutiveFilter() {
+async function populateExecutiveFilter() {
   const execSelect = document.getElementById('leads-filter-executive');
   if (!execSelect) return;
-  const execs = Array.from(new Set(allLeadsList.map(l => l.assigned_person).filter(Boolean)));
-  let html = '<option value="ALL">All Executives</option>';
-  execs.forEach(e => {
-    html += `<option value="${e}">${e}</option>`;
-  });
-  execSelect.innerHTML = html;
+  try {
+    const res = await fetch('/api/executives');
+    const execs = await res.json();
+    let html = '<option value="ALL">All Executives</option>';
+    if (Array.isArray(execs)) {
+      execs.forEach(e => {
+        if (e) html += `<option value="${e}">${e}</option>`;
+      });
+    }
+    execSelect.innerHTML = html;
+  } catch (err) {
+    console.error("Error populating executive filter:", err);
+  }
 }
 
 function filterLeadsTable() {
@@ -1891,16 +1898,168 @@ function datetime_today() {
   return new Date().toISOString().split('T')[0];
 }
 
+let genericModuleDataStore = {};
+
+async function populateGenericExecutiveFilter(selectId) {
+  const el = document.getElementById(selectId);
+  if (!el) return;
+  try {
+    const res = await fetch('/api/executives');
+    const execs = await res.json();
+    let html = '<option value="ALL">All Executives</option>';
+    if (Array.isArray(execs)) {
+      execs.forEach(e => {
+        if (e) html += `<option value="${e}">${e}</option>`;
+      });
+    }
+    el.innerHTML = html;
+  } catch (err) {
+    console.error("Error loading generic executive filter:", err);
+  }
+}
+
+function populateGenericStatusFilter(pageId, records) {
+  const statusEl = document.getElementById(`generic-status-${pageId}`);
+  if (!statusEl) return;
+  const statuses = Array.from(new Set((records || []).map(r => r.status).filter(Boolean)));
+  let html = '<option value="ALL">All Statuses</option>';
+  statuses.forEach(s => {
+    html += `<option value="${s}">${s}</option>`;
+  });
+  statusEl.innerHTML = html;
+}
+
+function filterGenericTableData(pageId) {
+  const records = genericModuleDataStore[pageId] || [];
+  const cfg = MODULE_FIELD_CONFIG[pageId] || MODULE_FIELD_CONFIG['leads'];
+
+  const searchVal = (document.getElementById(`generic-search-${pageId}`)?.value || '').toLowerCase().trim();
+  const statusVal = document.getElementById(`generic-status-${pageId}`)?.value || 'ALL';
+  const planVal = document.getElementById(`generic-plan-${pageId}`)?.value || 'ALL';
+  const execVal = document.getElementById(`generic-exec-${pageId}`)?.value || 'ALL';
+
+  const filtered = records.filter(r => {
+    const linkedLead = (r.lead_id && Array.isArray(allLeadsList)) ? allLeadsList.find(l => l.id === r.lead_id) : null;
+
+    const custName = r.customer_name || (linkedLead ? linkedLead.customer_name : '') || '';
+    const personName = r.person || r.assigned_person || r.caller_person || r.surveyor_name || r.auditor_name || (linkedLead ? linkedLead.assigned_person : '') || '';
+    const f1 = String(r[cfg.f1_prop] || '');
+    const f2 = String(r[cfg.f2_prop] || '');
+    const f3 = String(r[cfg.f3_prop] || '');
+    const refNo = r.reference_no || r.invoice_no || r.objection || r.remarks || '';
+    
+    const matchSearch = !searchVal || 
+      custName.toLowerCase().includes(searchVal) ||
+      personName.toLowerCase().includes(searchVal) ||
+      f1.toLowerCase().includes(searchVal) ||
+      f2.toLowerCase().includes(searchVal) ||
+      f3.toLowerCase().includes(searchVal) ||
+      refNo.toLowerCase().includes(searchVal);
+
+    const recStatus = r.status || 'Active';
+    const matchStatus = statusVal === 'ALL' || recStatus === statusVal;
+
+    const recPlan = r.plan_discussed || r.plan_name || r.plan || (linkedLead ? linkedLead.plan_discussed : '') || '';
+    const matchPlan = planVal === 'ALL' || recPlan === planVal;
+
+    const recExec = r.person || r.assigned_person || r.caller_person || r.executive || (linkedLead ? linkedLead.assigned_person : '') || '';
+    const matchExec = execVal === 'ALL' || recExec === execVal;
+
+    return matchSearch && matchStatus && matchPlan && matchExec;
+  });
+
+  renderGenericTableRows(pageId, filtered);
+}
+
+function renderGenericTableRows(pageId, records) {
+  const cfg = MODULE_FIELD_CONFIG[pageId] || MODULE_FIELD_CONFIG['leads'];
+  const tbody = document.getElementById(`generic-table-body-${pageId}`);
+  if (!tbody) return;
+
+  if (!records || records.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="padding: 25px; text-align: center; color: var(--text-muted);">No entries match the selected filters. Click "+ Add New ${cfg.title}" or change filter criteria.</td></tr>`;
+    return;
+  }
+
+  const franchisesMap = {};
+  if (Array.isArray(allFranchisesList)) {
+    allFranchisesList.forEach(f => franchisesMap[f.id] = f.name);
+  }
+
+  tbody.innerHTML = records.map(r => {
+    const linkedLead = (r.lead_id && Array.isArray(allLeadsList)) ? allLeadsList.find(l => l.id === r.lead_id) : null;
+    const fName = r.customer_name || (linkedLead ? linkedLead.customer_name : '') || (franchisesMap[r.franchise_id] || `Franchise #${r.franchise_id}`);
+    const pName = r.person || r.assigned_person || r.caller_person || r.surveyor_name || r.auditor_name || (linkedLead ? linkedLead.assigned_person : 'Staff');
+    const v1 = r[cfg.f1_prop] || r.name || r.customer_name || r.item_name || r.invoice_no || r.gr_number || r.campaign_name || r.batch_name || '-';
+    const v2 = r[cfg.f2_prop] || r.mobile || r.reference_no || r.item_details || r.trainer_name || r.pos_status || '-';
+    const v3 = r[cfg.f3_prop] !== undefined ? (typeof r[cfg.f3_prop] === 'number' ? `Rs. ${r[cfg.f3_prop].toLocaleString('en-IN')}` : r[cfg.f3_prop]) : '-';
+    const filePath = r.document_path || r.file_path || r.pdf_filepath;
+
+    return `
+      <tr style="border-bottom: 1px solid var(--border-color);">
+        <td style="padding: 10px 14px; font-weight: 600; color: var(--text-muted);">#${r.id}</td>
+        <td style="padding: 10px 14px; font-weight: 600; color: #1E293B;">${fName}</td>
+        <td style="padding: 10px 14px; color: #2563EB; font-weight: 500;">${pName}</td>
+        <td style="padding: 10px 14px;">${v1}</td>
+        <td style="padding: 10px 14px; color: #64748B;">${v2}</td>
+        <td style="padding: 10px 14px; font-weight: 600; color: #059669;">${v3}</td>
+        <td style="padding: 10px 14px;"><span class="role-badge" style="background:#F1F5F9; color:#334155;">${r.status || 'Active'}</span></td>
+        <td style="padding: 10px 14px;">
+          ${filePath ? `
+            <a href="${filePath}" target="_blank" style="background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="View Original Linked File">
+              <i class="fa-solid fa-file-earmark-arrow-down"></i> Original File
+            </a>
+          ` : '-'}
+        </td>
+        <td style="padding: 10px 14px; text-align: right; white-space: nowrap;">
+          <button onclick='openUniversalEntryModal("${pageId}", ${JSON.stringify(r).replace(/'/g, "&apos;")})' style="background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 4px;">
+            <i class="fa-solid fa-pen"></i> Edit
+          </button>
+          <button onclick='deleteModuleEntry("${cfg.endpoint}", ${r.id}, () => renderModulePage("${pageId}"))' style="background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">
+            <i class="fa-solid fa-trash"></i> Delete
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
 async function renderGenericModuleTable(pageId, containerEl) {
   const cfg = MODULE_FIELD_CONFIG[pageId] || MODULE_FIELD_CONFIG['leads'];
-  
+
+  if (!allLeadsList || allLeadsList.length === 0) {
+    try {
+      const lRes = await fetch('/api/leads');
+      allLeadsList = await lRes.json();
+    } catch(e) {}
+  }
+
   containerEl.innerHTML = `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <i class="fa-solid fa-filter text-muted"></i>
-        <span style="font-weight: 600; font-size: 0.85rem;">Records Overview</span>
+    <!-- Top Multi-Filter Bar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 12px 16px; border-radius: 10px;">
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex: 1;">
+        <div style="position: relative; min-width: 200px; flex: 1;">
+          <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; font-size: 0.85rem;"></i>
+          <input type="text" id="generic-search-${pageId}" placeholder="Search customer, person, details..." oninput="filterGenericTableData('${pageId}')" style="padding: 7px 10px 7px 32px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; width: 100%;">
+        </div>
+
+        <select id="generic-status-${pageId}" onchange="filterGenericTableData('${pageId}')" style="padding: 7px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; background: #FFFFFF; font-weight: 500;">
+          <option value="ALL">All Statuses</option>
+        </select>
+
+        <select id="generic-plan-${pageId}" onchange="filterGenericTableData('${pageId}')" style="padding: 7px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; background: #FFFFFF; font-weight: 500;">
+          <option value="ALL">All Plans</option>
+          <option value="Plan A">Plan A</option>
+          <option value="Plan B">Plan B</option>
+          <option value="Plan C">Plan C</option>
+        </select>
+
+        <select id="generic-exec-${pageId}" onchange="filterGenericTableData('${pageId}')" style="padding: 7px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; background: #FFFFFF; font-weight: 500;">
+          <option value="ALL">All Executives</option>
+        </select>
       </div>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
         <button onclick="openImportHistoryModal('${pageId}')" style="background: #F1F5F9; color: #334155; border: 1px solid #CBD5E1; padding: 8px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem;">
           <i class="fa-solid fa-clock-rotate-left"></i> Import History
         </button>
@@ -1913,12 +2072,13 @@ async function renderGenericModuleTable(pageId, containerEl) {
       </div>
     </div>
 
+    <!-- Records Table -->
     <div style="overflow-x: auto; border: 1px solid var(--border-color); border-radius: 8px;">
       <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
         <thead>
           <tr style="background: #F1F5F9; text-align: left; color: #334155;">
             <th style="padding: 10px 14px;"># ID</th>
-            <th style="padding: 10px 14px;">Franchise Store</th>
+            <th style="padding: 10px 14px;">Customer / Store</th>
             <th style="padding: 10px 14px;">Responsible Person</th>
             <th style="padding: 10px 14px;">${cfg.f1_label}</th>
             <th style="padding: 10px 14px;">${cfg.f2_label}</th>
@@ -1928,63 +2088,22 @@ async function renderGenericModuleTable(pageId, containerEl) {
             <th style="padding: 10px 14px; text-align: right;">Actions</th>
           </tr>
         </thead>
-        <tbody id="generic-table-body">
+        <tbody id="generic-table-body-${pageId}">
           <tr><td colspan="9" style="padding: 20px; text-align: center; color: var(--text-muted);">Loading entries...</td></tr>
         </tbody>
       </table>
     </div>
   `;
 
+  populateGenericExecutiveFilter(`generic-exec-${pageId}`);
+
   try {
     const res = await fetch(cfg.endpoint);
     const records = await res.json();
+    genericModuleDataStore[pageId] = records || [];
 
-    const tbody = document.getElementById('generic-table-body');
-    if (!tbody) return;
-
-    if (!records || records.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="9" style="padding: 25px; text-align: center; color: var(--text-muted);">No entries found. Click "+ Add New ${cfg.title}" or "Auto-Import Excel/PDF" to record an entry.</td></tr>`;
-      return;
-    }
-
-    const franchisesMap = {};
-    allFranchisesList.forEach(f => franchisesMap[f.id] = f.name);
-
-    tbody.innerHTML = records.map(r => {
-      const fName = franchisesMap[r.franchise_id] || `Franchise #${r.franchise_id}`;
-      const pName = r.person || r.assigned_person || r.caller_person || r.surveyor_name || r.auditor_name || 'Staff';
-      const v1 = r[cfg.f1_prop] || r.name || r.customer_name || r.item_name || r.invoice_no || r.gr_number || r.campaign_name || r.batch_name || '-';
-      const v2 = r[cfg.f2_prop] || r.mobile || r.reference_no || r.item_details || r.trainer_name || r.pos_status || '-';
-      const v3 = r[cfg.f3_prop] !== undefined ? (typeof r[cfg.f3_prop] === 'number' ? `Rs. ${r[cfg.f3_prop].toLocaleString('en-IN')}` : r[cfg.f3_prop]) : '-';
-      const filePath = r.document_path || r.file_path || r.pdf_filepath;
-
-      return `
-        <tr style="border-bottom: 1px solid var(--border-color);">
-          <td style="padding: 10px 14px; font-weight: 600; color: var(--text-muted);">#${r.id}</td>
-          <td style="padding: 10px 14px; font-weight: 600; color: #1E293B;">${fName}</td>
-          <td style="padding: 10px 14px; color: #2563EB; font-weight: 500;">${pName}</td>
-          <td style="padding: 10px 14px;">${v1}</td>
-          <td style="padding: 10px 14px; color: #64748B;">${v2}</td>
-          <td style="padding: 10px 14px; font-weight: 600; color: #059669;">${v3}</td>
-          <td style="padding: 10px 14px;"><span class="role-badge" style="background:#F1F5F9; color:#334155;">${r.status || 'Active'}</span></td>
-          <td style="padding: 10px 14px;">
-            ${filePath ? `
-              <a href="${filePath}" target="_blank" style="background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; padding: 3px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="View Original Linked File">
-                <i class="fa-solid fa-file-earmark-arrow-down"></i> Original File
-              </a>
-            ` : '-'}
-          </td>
-          <td style="padding: 10px 14px; text-align: right; white-space: nowrap;">
-            <button onclick='openUniversalEntryModal("${pageId}", ${JSON.stringify(r).replace(/'/g, "&apos;")})' style="background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 4px;">
-              <i class="fa-solid fa-pen"></i> Edit
-            </button>
-            <button onclick='deleteModuleEntry("${cfg.endpoint}", ${r.id}, () => renderModulePage("${pageId}"))' style="background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; padding: 4px 8px; border-radius: 4px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">
-              <i class="fa-solid fa-trash"></i> Delete
-            </button>
-          </td>
-        </tr>
-      `;
-    }).join('');
+    populateGenericStatusFilter(pageId, genericModuleDataStore[pageId]);
+    filterGenericTableData(pageId);
   } catch (err) {
     console.error(err);
   }
