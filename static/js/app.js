@@ -101,12 +101,12 @@ function renderFranchiseCards(cards) {
 
   if (!cards || cards.length === 0) {
     grid.innerHTML = `
-      <div style="grid-column: 1/-1; text-align: center; padding: 60px 20px; background: #FFFFFF; border-radius: 16px; border: 1px dashed #CBD5E1; margin-top: 10px;">
-        <i class="fa-solid fa-store" style="font-size: 3rem; color: #94A3B8; margin-bottom: 15px;"></i>
-        <h3 style="color: #0F172A; margin: 0 0 8px; font-weight: 700;">No Franchises Found</h3>
-        <p style="color: #64748B; margin: 0 0 20px;">Click below to create a new franchise.</p>
-        <div style="display: flex; gap: 12px; justify-content: center;">
-          <button class="btn-add-franchise" onclick="openNewFranchiseModal()">
+      <div style="grid-column: 1/-1; text-align: center; padding: 24px 20px; background: #FFFFFF; border-radius: 10px; border: 1px dashed #CBD5E1; margin-top: 4px;">
+        <i class="fa-solid fa-store" style="font-size: 1.5rem; color: #94A3B8; margin-bottom: 6px;"></i>
+        <h4 style="color: #0F172A; margin: 0 0 4px; font-weight: 700; font-size: 0.92rem;">No Franchises Found</h4>
+        <p style="color: #64748B; margin: 0 0 12px; font-size: 0.8rem;">Click below to add a new franchise workspace.</p>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+          <button class="btn-add-franchise" onclick="openNewFranchiseModal()" style="height: 30px; font-size: 0.78rem; padding: 0 14px;">
             <i class="fa-solid fa-plus"></i> Add Franchise
           </button>
         </div>
