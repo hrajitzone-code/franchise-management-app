@@ -2751,9 +2751,53 @@ async function deleteRole(roleId) {
 
 let currentUser = null;
 
+function updateAuthDiagnostics(action = '', err = null) {
+  try {
+    const loginScreen = document.getElementById('login-screen');
+    const appContainer = document.getElementById('app-container');
+    
+    const elApi = document.getElementById('diag-login-api');
+    const elUser = document.getElementById('diag-current-user');
+    const elAuth = document.getElementById('diag-auth-state');
+    const elLogin = document.getElementById('diag-login-screen');
+    const elApp = document.getElementById('diag-app-container');
+    const elAction = document.getElementById('diag-last-action');
+    const elErr = document.getElementById('diag-last-error');
+
+    if (elUser) elUser.innerText = currentUser ? `${currentUser.full_name} (${currentUser.username})` : 'NONE';
+    if (elAuth) {
+      elAuth.innerText = currentUser ? 'AUTHENTICATED' : 'UNAUTHENTICATED';
+      elAuth.style.color = currentUser ? '#34D399' : '#F59E0B';
+    }
+    if (elLogin && loginScreen) elLogin.innerText = (loginScreen.style.display || 'flex').toUpperCase();
+    if (elApp && appContainer) elApp.innerText = (appContainer.style.display || 'none').toUpperCase();
+    if (elAction && action) elAction.innerText = action;
+    if (err) {
+      if (elErr) {
+        elErr.innerText = String(err.message || err);
+        elErr.style.color = '#F87171';
+      }
+    }
+  } catch(e) {}
+}
+
+window.addEventListener('error', (event) => {
+  const elErr = document.getElementById('diag-last-error');
+  if (elErr) {
+    elErr.innerText = `${event.message} at ${event.filename}:${event.lineno}`;
+    elErr.style.color = '#F87171';
+  }
+});
+
 async function checkAuthSession() {
+  updateAuthDiagnostics('CHECKING SESSION');
   try {
     const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
+    if (!res.ok) {
+      showLoginScreen();
+      updateAuthDiagnostics('SESSION CHECK FAILED (HTTP ' + res.status + ')');
+      return;
+    }
     const data = await res.json();
     if (data.authenticated && data.user) {
       currentUser = data.user;
@@ -2778,18 +2822,21 @@ async function checkAuthSession() {
         }
       }
 
-      applyPermissionsToUI(currentUser);
+      try { applyPermissionsToUI(currentUser); } catch(e) { console.error(e); }
+      try { restoreSidebarState(); } catch(e) { console.error(e); }
+      try { initEventListeners(); } catch(e) { console.error(e); }
+      try { loadDashboard(); } catch(e) { console.error(e); }
+      try { loadExpenseCategories(); } catch(e) { console.error(e); }
+      try { loadFranchisesList(); } catch(e) { console.error(e); }
 
-      restoreSidebarState();
-      initEventListeners();
-      loadDashboard();
-      loadExpenseCategories();
-      loadFranchisesList();
+      updateAuthDiagnostics('SESSION CONFIRMED');
     } else {
       showLoginScreen();
+      updateAuthDiagnostics('UNAUTHENTICATED SESSION');
     }
   } catch (err) {
     console.error('Error checking auth session:', err);
+    updateAuthDiagnostics('SESSION EXCEPTION', err);
     showLoginScreen();
   }
 }
@@ -2800,6 +2847,7 @@ function showLoginScreen() {
   const appContainer = document.getElementById('app-container');
   if (loginScreen) loginScreen.style.display = 'flex';
   if (appContainer) appContainer.style.display = 'none';
+  updateAuthDiagnostics('SHOW LOGIN SCREEN');
 }
 
 async function handleLoginSubmit(e) {
@@ -2808,6 +2856,7 @@ async function handleLoginSubmit(e) {
   const password = document.getElementById('login-password')?.value.trim();
   const errorAlert = document.getElementById('login-error-alert');
   const btn = document.getElementById('login-btn');
+  const diagApi = document.getElementById('diag-login-api');
 
   if (!username || !password) {
     if (errorAlert) {
@@ -2822,6 +2871,8 @@ async function handleLoginSubmit(e) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing In...';
   }
+  if (diagApi) diagApi.innerText = 'FETCHING...';
+  updateAuthDiagnostics('LOGIN ATTEMPT SUBMITTED');
 
   try {
     const res = await fetch('/api/auth/login', {
@@ -2840,6 +2891,7 @@ async function handleLoginSubmit(e) {
     }
 
     if (res.ok && data.status === 'success') {
+      if (diagApi) diagApi.innerText = 'SUCCESS (200)';
       const user = data.user;
       if (user) {
         currentUser = user;
@@ -2864,27 +2916,33 @@ async function handleLoginSubmit(e) {
           }
         }
 
-        applyPermissionsToUI(currentUser);
-        restoreSidebarState();
-        initEventListeners();
-        loadDashboard();
-        loadExpenseCategories();
-        loadFranchisesList();
+        try { applyPermissionsToUI(currentUser); } catch(e) { console.error(e); }
+        try { restoreSidebarState(); } catch(e) { console.error(e); }
+        try { initEventListeners(); } catch(e) { console.error(e); }
+        try { loadDashboard(); } catch(e) { console.error(e); }
+        try { loadExpenseCategories(); } catch(e) { console.error(e); }
+        try { loadFranchisesList(); } catch(e) { console.error(e); }
+
+        updateAuthDiagnostics('LOGIN SUCCESS');
       } else {
         await checkAuthSession();
       }
     } else {
+      if (diagApi) diagApi.innerText = 'FAILED (' + res.status + ')';
       if (errorAlert) {
         errorAlert.innerText = data.message || 'Invalid username/email or password.';
         errorAlert.style.display = 'block';
       }
+      updateAuthDiagnostics('LOGIN FAILED');
     }
   } catch (err) {
     console.error('Login error:', err);
+    if (diagApi) diagApi.innerText = 'ERROR';
     if (errorAlert) {
       errorAlert.innerText = 'Network connection error. Please try again.';
       errorAlert.style.display = 'block';
     }
+    updateAuthDiagnostics('LOGIN EXCEPTION', err);
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -2900,6 +2958,7 @@ async function handleLogout() {
     console.error('Logout error:', err);
   } finally {
     showLoginScreen();
+    updateAuthDiagnostics('LOGOUT COMPLETED');
   }
 }
 
