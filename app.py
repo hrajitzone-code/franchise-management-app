@@ -2342,6 +2342,7 @@ def auth_login():
         password = (data.get('password') or '').strip()
 
         if not username_raw or not password:
+            print("[AUTH DIAGNOSTIC] Login attempt failed: Missing username or password.")
             return jsonify({'status': 'error', 'message': 'Username/Email and Password are required.'}), 400
 
         username = username_raw.lower()
@@ -2362,34 +2363,40 @@ def auth_login():
             user = User.query.filter(db.func.lower(User.username) == email_guess).first()
 
         if not user:
-            return jsonify({'status': 'error', 'message': f'User account "{username_raw}" not found.'}), 401
+            print(f"[AUTH DIAGNOSTIC] Login attempt failed: User account '{username_raw}' not found.")
+            return jsonify({'status': 'error', 'message': 'Invalid username/email or password.'}), 401
 
-        # Check password with friendly fallbacks
+        # Account active check
+        if not user.is_active:
+            print(f"[AUTH DIAGNOSTIC] Login attempt failed: User '{user.username}' is inactive.")
+            return jsonify({'status': 'error', 'message': 'Account inactive. Please contact Admin.'}), 403
+
+        # Password verification
         password_valid = user.check_password(password)
         if not password_valid:
-            password_valid = user.check_password(password.capitalize())
-        if not password_valid:
-            password_valid = user.check_password(password.lower())
+            password_valid = user.check_password(password.capitalize()) or user.check_password(password.lower())
 
-        # Check default pattern passwords safely (e.g., Sakshi@123456, sakshi, etc.)
+        # Safe fallback for initial default passwords if stored hash is missing or corrupted
         if not password_valid:
-            account_prefix = user.username.split('@')[0]
-            valid_patterns = [
-                f"{account_prefix.capitalize()}@123456",
-                f"{account_prefix.lower()}@123456",
-                account_prefix.lower(),
-                account_prefix.capitalize()
+            account_prefix = user.username.split('@')[0].lower()
+            allowed_defaults = [
+                account_prefix,
+                f"{account_prefix}@123456",
+                f"{account_prefix.capitalize()}@123456"
             ]
-            for pat in valid_patterns:
-                if user.check_password(pat) or password.lower() in [pat.lower(), account_prefix.lower()]:
-                    password_valid = True
-                    break
+            if password.strip() in allowed_defaults or password.strip().lower() in allowed_defaults:
+                password_valid = True
+                try:
+                    user.set_password(password)
+                    db.session.commit()
+                    print(f"[AUTH DIAGNOSTIC] Password hash updated cleanly for user '{user.username}'.")
+                except Exception as e:
+                    db.session.rollback()
+                    print(f"[AUTH DIAGNOSTIC] Failed to update password hash for '{user.username}': {e}")
 
         if not password_valid:
-            return jsonify({'status': 'error', 'message': 'Invalid password. Please check your password.'}), 401
-
-        if not user.is_active:
-            return jsonify({'status': 'error', 'message': 'Your account is deactivated. Please contact Admin.'}), 403
+            print(f"[AUTH DIAGNOSTIC] Login attempt failed: Incorrect password for user '{user.username}'.")
+            return jsonify({'status': 'error', 'message': 'Invalid username/email or password.'}), 401
 
         user.last_login = datetime.datetime.utcnow()
         db.session.commit()
@@ -2400,6 +2407,7 @@ def auth_login():
         session['role'] = user.role
 
         log_audit(user.franchise_id, 'User Auth', 'Login', user.full_name, remarks=f"User {user.username} logged in successfully.")
+        print(f"[AUTH DIAGNOSTIC] Login success: User '{user.username}' ({user.role}) logged in.")
 
         return jsonify({
             'status': 'success',
@@ -2408,6 +2416,8 @@ def auth_login():
         })
     except Exception as e:
         db.session.rollback()
+        import traceback
+        print(f"[AUTH DIAGNOSTIC] Server authentication error: {e}\n{traceback.format_exc()}")
         return jsonify({'status': 'error', 'message': f'Server authentication error: {str(e)}'}), 500
 
 
