@@ -28,7 +28,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'franchise_management_app_secret_key_2026')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-if os.environ.get('VERCEL') or not app.debug:
+if os.environ.get('VERCEL'):
     app.config['SESSION_COOKIE_SECURE'] = True
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
