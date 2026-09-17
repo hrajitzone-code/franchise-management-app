@@ -84,18 +84,39 @@ else:
 def check_and_migrate_db():
     try:
         inspector = db.inspect(db.engine)
-        if 'leads' in inspector.get_table_names():
-            columns = [c['name'] for c in inspector.get_columns('leads')]
-            with db.engine.connect() as conn:
-                if 'requirements' not in columns:
-                    conn.execute(db.text("ALTER TABLE leads ADD COLUMN requirements TEXT"))
-                if 'plan_discussed' not in columns:
-                    conn.execute(db.text("ALTER TABLE leads ADD COLUMN plan_discussed VARCHAR(100)"))
-                if 'investment_capacity' not in columns:
-                    conn.execute(db.text("ALTER TABLE leads ADD COLUMN investment_capacity VARCHAR(100)"))
-                if 'objections' not in columns:
-                    conn.execute(db.text("ALTER TABLE leads ADD COLUMN objections TEXT"))
-                conn.commit()
+        tables = inspector.get_table_names()
+        with db.engine.connect() as conn:
+            if 'leads' in tables:
+                columns = [c['name'] for c in inspector.get_columns('leads')]
+                if 'requirements' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN requirements TEXT"))
+                if 'plan_discussed' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN plan_discussed VARCHAR(100)"))
+                if 'investment_capacity' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN investment_capacity VARCHAR(100)"))
+                if 'objections' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN objections TEXT"))
+                if 'state' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN state VARCHAR(100)"))
+                if 'location' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN location VARCHAR(150)"))
+                if 'inquiry_date' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN inquiry_date VARCHAR(50)"))
+                if 'existing_business' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN existing_business VARCHAR(150)"))
+                if 'shop_availability' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN shop_availability VARCHAR(100)"))
+                if 'location_details' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN location_details TEXT"))
+                if 'discussion' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN discussion TEXT"))
+                if 'followup_date' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN followup_date VARCHAR(50)"))
+
+            if 'call_history' in tables:
+                columns = [c['name'] for c in inspector.get_columns('call_history')]
+                if 'lead_id' not in columns: conn.execute(db.text("ALTER TABLE call_history ADD COLUMN lead_id INTEGER"))
+                if 'customer_name' not in columns: conn.execute(db.text("ALTER TABLE call_history ADD COLUMN customer_name VARCHAR(150)"))
+
+            if 'follow_ups' in tables:
+                columns = [c['name'] for c in inspector.get_columns('follow_ups')]
+                if 'lead_id' not in columns: conn.execute(db.text("ALTER TABLE follow_ups ADD COLUMN lead_id INTEGER"))
+                if 'customer_name' not in columns: conn.execute(db.text("ALTER TABLE follow_ups ADD COLUMN customer_name VARCHAR(150)"))
+
+            if 'token_records' in tables:
+                columns = [c['name'] for c in inspector.get_columns('token_records')]
+                if 'lead_id' not in columns: conn.execute(db.text("ALTER TABLE token_records ADD COLUMN lead_id INTEGER"))
+                if 'customer_name' not in columns: conn.execute(db.text("ALTER TABLE token_records ADD COLUMN customer_name VARCHAR(150)"))
+
+            conn.commit()
     except Exception as e:
         print(f"DB auto-migration note: {e}")
 
@@ -962,25 +983,33 @@ def update_delete_expense(exp_id):
 def manage_leads():
     if request.method == 'POST':
         data = request.json or request.form
-        f_id = int(data.get('franchise_id', 1))
+        f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
         lead = Lead(
             franchise_id=f_id,
-            customer_name=data.get('customer_name', 'New Customer'),
+            customer_name=data.get('customer_name', 'New Inquiry Customer'),
             mobile=data.get('mobile', ''),
             email=data.get('email', ''),
             city=data.get('city', ''),
+            state=data.get('state', ''),
+            location=data.get('location', ''),
             source=data.get('source', 'Direct Call'),
-            status=data.get('status', 'New Lead'),
+            inquiry_date=data.get('inquiry_date', datetime.datetime.now().strftime('%Y-%m-%d')),
+            status=data.get('status', 'New'),
             assigned_person=data.get('assigned_person', 'Executive'),
-            requirements=data.get('requirements', ''),
-            plan_discussed=data.get('plan_discussed', ''),
+            existing_business=data.get('existing_business', ''),
+            plan_discussed=data.get('plan_discussed', 'Plan A'),
             investment_capacity=data.get('investment_capacity', ''),
+            shop_availability=data.get('shop_availability', ''),
+            location_details=data.get('location_details', ''),
+            requirements=data.get('requirements', ''),
+            discussion=data.get('discussion', ''),
             objections=data.get('objections', ''),
+            followup_date=data.get('followup_date', ''),
             remarks=data.get('remarks', '')
         )
         db.session.add(lead)
         db.session.commit()
-        log_audit(f_id, 'Leads', 'CREATE', lead.assigned_person, 'Lead Entry', None, lead.customer_name, f"Created Lead: {lead.customer_name}")
+        log_audit(f_id or 1, 'Leads', 'CREATE', lead.assigned_person, 'Pre-Franchise Inquiry', None, lead.customer_name, f"Created Inquiry Lead: {lead.customer_name}")
         return jsonify({'status': 'success', 'lead': lead.to_dict()})
     
     leads = Lead.query.order_by(Lead.created_at.desc()).all()
@@ -992,7 +1021,7 @@ def update_delete_lead(l_id):
     if request.method == 'DELETE':
         db.session.delete(lead)
         db.session.commit()
-        log_audit(lead.franchise_id, 'Leads', 'DELETE', 'Admin', 'Lead Record', lead.customer_name, 'Deleted', f"Deleted Lead #{l_id}")
+        log_audit(lead.franchise_id or 1, 'Leads', 'DELETE', 'Admin', 'Lead Record', lead.customer_name, 'Deleted', f"Deleted Lead #{l_id}")
         return jsonify({'status': 'success', 'message': f"Lead #{l_id} deleted."})
     
     data = request.json or request.form
@@ -1000,16 +1029,24 @@ def update_delete_lead(l_id):
     lead.mobile = data.get('mobile', lead.mobile)
     lead.email = data.get('email', lead.email)
     lead.city = data.get('city', lead.city)
+    lead.state = data.get('state', lead.state)
+    lead.location = data.get('location', lead.location)
     lead.source = data.get('source', lead.source)
+    lead.inquiry_date = data.get('inquiry_date', lead.inquiry_date)
     lead.status = data.get('status', lead.status)
     lead.assigned_person = data.get('assigned_person', lead.assigned_person)
-    lead.requirements = data.get('requirements', lead.requirements)
+    lead.existing_business = data.get('existing_business', lead.existing_business)
     lead.plan_discussed = data.get('plan_discussed', lead.plan_discussed)
     lead.investment_capacity = data.get('investment_capacity', lead.investment_capacity)
+    lead.shop_availability = data.get('shop_availability', lead.shop_availability)
+    lead.location_details = data.get('location_details', lead.location_details)
+    lead.requirements = data.get('requirements', lead.requirements)
+    lead.discussion = data.get('discussion', lead.discussion)
     lead.objections = data.get('objections', lead.objections)
+    lead.followup_date = data.get('followup_date', lead.followup_date)
     lead.remarks = data.get('remarks', lead.remarks)
     db.session.commit()
-    log_audit(lead.franchise_id, 'Leads', 'UPDATE', lead.assigned_person, 'Lead Record', None, lead.customer_name, f"Updated Lead #{l_id}")
+    log_audit(lead.franchise_id or 1, 'Leads', 'UPDATE', lead.assigned_person, 'Lead Record', None, lead.customer_name, f"Updated Lead #{l_id}")
     return jsonify({'status': 'success', 'lead': lead.to_dict()})
 
 @app.route('/api/leads/<int:l_id>/convert_to_franchise', methods=['POST'])
@@ -1017,9 +1054,19 @@ def convert_lead_to_franchise(l_id):
     lead = Lead.query.get_or_404(l_id)
     data = request.json or request.form or {}
     
+    # Check if ₹25,000 token received or status is Token Received
+    tokens_recorded = TokenRecord.query.filter((TokenRecord.lead_id == lead.id) | (TokenRecord.customer_name == lead.customer_name)).all()
+    total_token_received = sum(t.token_amount for t in tokens_recorded if t.status == 'Received')
+    
+    if lead.status != 'Token Received' and total_token_received < 25000:
+        return jsonify({
+            'status': 'error',
+            'message': f"Conversion requires minimum ₹25,000 token received. Recorded token: Rs. {total_token_received:,.2f}."
+        }), 400
+
     agreed_amount = float(data.get('agreed_amount', 500000.0))
-    plan_name = data.get('plan_name') or lead.plan_discussed or 'Standard Plan'
-    token_amount = float(data.get('token_amount', 25000.0))
+    plan_name = data.get('plan_name') or lead.plan_discussed or 'Plan A'
+    token_amount = float(data.get('token_amount', total_token_received or 25000.0))
     payment_mode = data.get('payment_mode', 'Bank Transfer')
     reference_no = data.get('reference_no', f"TOKEN-{int(datetime.datetime.now().timestamp())}")
     
@@ -1033,7 +1080,7 @@ def convert_lead_to_franchise(l_id):
         owner_mobile=lead.mobile,
         owner_email=lead.email,
         city=lead.city or 'Unknown City',
-        state=data.get('state', ''),
+        state=lead.state or data.get('state', ''),
         assigned_person=lead.assigned_person,
         plan_name=plan_name,
         status='Active',
@@ -1042,30 +1089,33 @@ def convert_lead_to_franchise(l_id):
     db.session.add(franchise)
     db.session.flush()
     
-    old_f_id = lead.franchise_id
     lead.franchise_id = franchise.id
     lead.status = 'Converted to Franchise'
     
-    if old_f_id:
-        CallHistory.query.filter_by(franchise_id=old_f_id).update({CallHistory.franchise_id: franchise.id})
-        FollowUp.query.filter_by(franchise_id=old_f_id).update({FollowUp.franchise_id: franchise.id})
-        TokenRecord.query.filter_by(franchise_id=old_f_id).update({TokenRecord.franchise_id: franchise.id})
-        
-    token_rec = TokenRecord(
-        franchise_id=franchise.id,
-        token_amount=token_amount,
-        payment_date=datetime.date.today().strftime('%Y-%m-%d'),
-        payment_mode=payment_mode,
-        reference_no=reference_no,
-        status='Received',
-        remarks=f"Pre-token conversion advance for Lead #{lead.id} ({lead.customer_name})",
-        person=lead.assigned_person
-    )
-    db.session.add(token_rec)
+    # Transfer calling history, followups, and token records to franchise
+    CallHistory.query.filter((CallHistory.lead_id == lead.id) | (CallHistory.customer_name == lead.customer_name)).update({CallHistory.franchise_id: franchise.id}, synchronize_session=False)
+    FollowUp.query.filter((FollowUp.lead_id == lead.id) | (FollowUp.customer_name == lead.customer_name)).update({FollowUp.franchise_id: franchise.id}, synchronize_session=False)
+    TokenRecord.query.filter((TokenRecord.lead_id == lead.id) | (TokenRecord.customer_name == lead.customer_name)).update({TokenRecord.franchise_id: franchise.id}, synchronize_session=False)
+    
+    if not tokens_recorded:
+        token_rec = TokenRecord(
+            franchise_id=franchise.id,
+            lead_id=lead.id,
+            customer_name=lead.customer_name,
+            token_amount=token_amount,
+            payment_date=datetime.date.today().strftime('%Y-%m-%d'),
+            payment_mode=payment_mode,
+            reference_no=reference_no,
+            status='Received',
+            remarks=f"Pre-token conversion advance for Lead #{lead.id} ({lead.customer_name})",
+            person=lead.assigned_person
+        )
+        db.session.add(token_rec)
+
     db.session.commit()
     
-    log_audit(franchise.id, 'Lead Conversion', 'CONVERT', lead.assigned_person, 'Lead to Franchise', lead.customer_name, franchise.code, f"Converted Lead #{lead.id} to Franchise {franchise.code}")
-    return jsonify({'status': 'success', 'message': f"Lead successfully converted to Franchise {franchise.code}!", 'franchise': franchise.to_dict()})
+    log_audit(franchise.id, 'Lead Conversion', 'CONVERT', lead.assigned_person, 'Lead to Franchise', lead.customer_name, franchise.code, f"Converted Lead #{lead.id} ({lead.customer_name}) to Franchise {franchise.code}")
+    return jsonify({'status': 'success', 'message': f"Lead '{lead.customer_name}' successfully converted to Franchise {franchise.code}!", 'franchise': franchise.to_dict()})
 
 # --- COMPLAINTS & ISSUES MODULE ---
 
@@ -1499,6 +1549,35 @@ def update_delete_operations(op_id):
     return jsonify({'status': 'success', 'operations': op.to_dict()})
 
 # --- CALL HISTORY & SURVEY ---
+
+@app.route('/api/calls', methods=['GET', 'POST'])
+def manage_calls():
+    if request.method == 'POST':
+        data = request.json or request.form
+        f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
+        l_id = int(data.get('lead_id')) if data.get('lead_id') else None
+        c_name = data.get('customer_name') or data.get('field_1') or ''
+        
+        call = CallHistory(
+            franchise_id=f_id,
+            lead_id=l_id,
+            customer_name=c_name,
+            caller_person=data.get('caller_person') or data.get('person', 'Executive'),
+            discussion=data.get('discussion') or data.get('field_1', ''),
+            requirement=data.get('requirement') or data.get('field_2', ''),
+            plan_discussed=data.get('plan_discussed', 'Plan A'),
+            objection=data.get('objection', ''),
+            next_followup_date=data.get('next_followup_date') or data.get('field_3', ''),
+            status=data.get('status', 'Completed'),
+            remarks=data.get('remarks', '')
+        )
+        db.session.add(call)
+        db.session.commit()
+        log_audit(f_id or 1, 'Calling History', 'CREATE', call.caller_person, 'Call Log', None, (call.discussion or '')[:30], 'Recorded Call Log')
+        return jsonify({'status': 'success', 'call': call.to_dict()})
+
+    calls = CallHistory.query.order_by(CallHistory.call_date.desc()).all()
+    return jsonify([c.to_dict() for c in calls])
 
 @app.route('/api/calls/<int:c_id>', methods=['PUT', 'DELETE'])
 def update_delete_call(c_id):

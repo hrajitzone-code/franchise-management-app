@@ -1136,6 +1136,211 @@
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260917_v11"></script>
+<!-- Dedicated Pre-Franchise Lead Inquiry Entry Modal -->
+<div id="lead-inquiry-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; padding: 20px; overflow-y: auto;">
+  <div style="background: #FFFFFF; width: 780px; max-width: 100%; border-radius: 14px; padding: 25px 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #E2E8F0; padding-bottom: 12px;">
+      <h3 style="margin: 0; color: #0F172A; font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+        <i class="fa-solid fa-user-plus" style="color: #2563EB;"></i> <span id="lead-modal-title">Pre-Franchise Inquiry Record</span>
+      </h3>
+      <button onclick="closeLeadModal()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #64748B;">&times;</button>
+    </div>
+
+    <form id="lead-inquiry-form" onsubmit="handleLeadFormSubmit(event)">
+      <input type="hidden" id="lead-id">
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Customer Name *</label>
+          <input type="text" id="lead-customer-name" required placeholder="e.g. Ramesh Patel" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Mobile / WhatsApp *</label>
+          <input type="text" id="lead-mobile" required placeholder="e.g. +91 9876543210" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Email Address</label>
+          <input type="email" id="lead-email" placeholder="e.g. ramesh@example.com" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">City *</label>
+          <input type="text" id="lead-city" required placeholder="e.g. Ahmedabad" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">State</label>
+          <input type="text" id="lead-state" placeholder="e.g. Gujarat" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Location / Area Details</label>
+          <input type="text" id="lead-location" placeholder="e.g. SG Highway, Bodakdev" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Lead Source</label>
+          <select id="lead-source" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+            <option value="Direct Call" selected>Direct Call</option>
+            <option value="Facebook Ads">Facebook Ads</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Website Inquiry">Website Inquiry</option>
+            <option value="Referral">Referral</option>
+            <option value="Cold Call">Cold Call</option>
+            <option value="Exhibition / Event">Exhibition / Event</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Inquiry Date</label>
+          <input type="date" id="lead-inquiry-date" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Assigned Executive *</label>
+          <input type="text" id="lead-assigned-person" required placeholder="e.g. Rajesh Kumar" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Business / Existing Occupation</label>
+          <input type="text" id="lead-existing-business" placeholder="e.g. Garment Retailer / Service" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Interested Plan *</label>
+          <select id="lead-interested-plan" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+            <option value="Plan A" selected>Plan A (Standard Retail Outlet)</option>
+            <option value="Plan B">Plan B (FOCO Model)</option>
+            <option value="Plan C">Plan C (Master Franchise)</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Investment Capacity</label>
+          <input type="text" id="lead-investment-capacity" placeholder="e.g. Rs. 5 Lakhs - 10 Lakhs" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Shop / Property Availability</label>
+          <select id="lead-shop-availability" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+            <option value="Available & Ready" selected>Available & Ready</option>
+            <option value="Looking for Property">Looking for Property</option>
+            <option value="Rented Property">Rented Property</option>
+            <option value="Owned Property">Owned Property</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Lead Status *</label>
+          <select id="lead-status" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+            <option value="New" selected>New</option>
+            <option value="Calling Pending">Calling Pending</option>
+            <option value="Connected">Connected</option>
+            <option value="Interested">Interested</option>
+            <option value="Not Interested">Not Interested</option>
+            <option value="Follow-up">Follow-up</option>
+            <option value="Token Pending">Token Pending</option>
+            <option value="Token Received">Token Received (₹25k Ready)</option>
+            <option value="Converted to Franchise">Converted to Franchise</option>
+            <option value="Lost">Lost</option>
+          </select>
+        </div>
+
+        <div style="grid-column: span 2;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Location / Property Details</label>
+          <textarea id="lead-location-details" rows="2" placeholder="Carpet area sqft, main road frontage, landmark..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; font-family: inherit;"></textarea>
+        </div>
+
+        <div style="grid-column: span 2;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Requirements & Special Discussion</label>
+          <textarea id="lead-requirements" rows="2" placeholder="Specific requirements, margin discussion, timeline..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; font-family: inherit;"></textarea>
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Objections / Concerns</label>
+          <input type="text" id="lead-objections" placeholder="e.g. Higher margin demand, royalty concern" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Next Follow-up Date</label>
+          <input type="date" id="lead-followup-date" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+        </div>
+
+        <div style="grid-column: span 2;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Remarks & Additional Notes</label>
+          <textarea id="lead-remarks" rows="2" placeholder="Executive remarks, call summaries..." style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; font-family: inherit;"></textarea>
+        </div>
+
+        <div style="grid-column: span 2; display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+          <button type="button" onclick="closeLeadModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+          <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #2563EB; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+            <i class="fa-solid fa-floppy-disk"></i> Save Pre-Franchise Inquiry
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Convert Lead to Franchise Modal -->
+<div id="lead-conversion-modal" style="display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+  <div style="background: #FFFFFF; width: 520px; max-width: 100%; border-radius: 14px; padding: 25px 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #E2E8F0; padding-bottom: 10px;">
+      <h3 style="margin: 0; color: #0F172A; font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+        <i class="fa-solid fa-store" style="color: #059669;"></i> Convert Pre-Franchise Lead to Franchise
+      </h3>
+      <button onclick="closeLeadConversionModal()" style="background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #64748B;">&times;</button>
+    </div>
+
+    <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 12px; color: #065F46; font-size: 0.82rem; margin-bottom: 16px;">
+      <i class="fa-solid fa-circle-check"></i> Token received verified (₹25,000). Converting this lead will generate an official Franchise Code and transfer all calling & follow-up histories to the new Franchise profile.
+    </div>
+
+    <form id="lead-conversion-form" onsubmit="handleLeadConversionSubmit(event)">
+      <input type="hidden" id="convert-lead-id">
+
+      <div style="margin-bottom: 12px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Customer Name</label>
+        <input type="text" id="convert-customer-name" readonly style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; background: #F8FAFC; font-size: 0.85rem; font-weight: 600;">
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Auto-Generated Franchise Code *</label>
+        <input type="text" id="convert-franchise-code" required style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem; font-weight: 700; color: #2563EB;">
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Franchise Plan *</label>
+        <select id="convert-plan-name" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+          <option value="Plan A">Plan A (Standard Retail Outlet)</option>
+          <option value="Plan B">Plan B (FOCO Model)</option>
+          <option value="Plan C">Plan C (Master Franchise)</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Agreed Total Franchise Fee (Rs.) *</label>
+        <input type="number" id="convert-agreed-amount" required value="500000" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Recorded Token Advance (Rs.) *</label>
+        <input type="number" id="convert-token-amount" required value="25000" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.85rem;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" onclick="closeLeadConversionModal()" style="padding: 8px 18px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 22px; border-radius: 6px; border: none; background: #059669; color: #FFFFFF; cursor: pointer; font-weight: 600;">
+          <i class="fa-solid fa-circle-check"></i> Complete Franchise Conversion
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="/static/js/app.js?v=20260917_v12"></script>
 </body>
 </html>

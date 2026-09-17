@@ -47,13 +47,21 @@ class Lead(db.Model):
     mobile = db.Column(db.String(20), nullable=False)
     email = db.Column(db.String(120), nullable=True)
     city = db.Column(db.String(100), nullable=True)
+    state = db.Column(db.String(100), nullable=True)
+    location = db.Column(db.String(150), nullable=True)
     source = db.Column(db.String(100), default='Direct Call')
-    status = db.Column(db.String(50), default='New Lead')
+    inquiry_date = db.Column(db.String(50), nullable=True)
+    status = db.Column(db.String(50), default='New') # New, Calling Pending, Connected, Interested, Not Interested, Follow-up, Token Pending, Token Received, Converted, Lost
     assigned_person = db.Column(db.String(100), nullable=False)
-    requirements = db.Column(db.Text, nullable=True)
-    plan_discussed = db.Column(db.String(100), nullable=True)
+    existing_business = db.Column(db.String(150), nullable=True)
+    plan_discussed = db.Column(db.String(100), nullable=True) # Plan A, Plan B, Plan C
     investment_capacity = db.Column(db.String(100), nullable=True)
+    shop_availability = db.Column(db.String(100), nullable=True) # Available, Looking for Property, Rented, Owned
+    location_details = db.Column(db.Text, nullable=True)
+    requirements = db.Column(db.Text, nullable=True)
+    discussion = db.Column(db.Text, nullable=True)
     objections = db.Column(db.Text, nullable=True)
+    followup_date = db.Column(db.String(50), nullable=True)
     remarks = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
@@ -65,13 +73,21 @@ class Lead(db.Model):
             'mobile': self.mobile,
             'email': self.email or '',
             'city': self.city or '',
-            'source': self.source,
-            'status': self.status,
-            'assigned_person': self.assigned_person,
-            'requirements': self.requirements or '',
-            'plan_discussed': self.plan_discussed or '',
+            'state': self.state or '',
+            'location': self.location or '',
+            'source': self.source or 'Direct Call',
+            'inquiry_date': self.inquiry_date or (self.created_at.strftime('%Y-%m-%d') if self.created_at else ''),
+            'status': self.status or 'New',
+            'assigned_person': self.assigned_person or 'Executive',
+            'existing_business': self.existing_business or '',
+            'plan_discussed': self.plan_discussed or 'Plan A',
             'investment_capacity': self.investment_capacity or '',
+            'shop_availability': self.shop_availability or '',
+            'location_details': self.location_details or '',
+            'requirements': self.requirements or '',
+            'discussion': self.discussion or '',
             'objections': self.objections or '',
+            'followup_date': self.followup_date or '',
             'remarks': self.remarks or '',
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
@@ -79,7 +95,9 @@ class Lead(db.Model):
 class CallHistory(db.Model):
     __tablename__ = 'call_history'
     id = db.Column(db.Integer, primary_key=True)
-    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=False)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
+    customer_name = db.Column(db.String(150), nullable=True)
     caller_person = db.Column(db.String(100), nullable=False)
     call_date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     discussion = db.Column(db.Text, nullable=False)
@@ -94,6 +112,8 @@ class CallHistory(db.Model):
         return {
             'id': self.id,
             'franchise_id': self.franchise_id,
+            'lead_id': self.lead_id,
+            'customer_name': self.customer_name or '',
             'caller_person': self.caller_person,
             'call_date': self.call_date.strftime('%Y-%m-%d %H:%M:%S') if self.call_date else '',
             'discussion': self.discussion,
@@ -108,7 +128,9 @@ class CallHistory(db.Model):
 class FollowUp(db.Model):
     __tablename__ = 'follow_ups'
     id = db.Column(db.Integer, primary_key=True)
-    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=False)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
+    customer_name = db.Column(db.String(150), nullable=True)
     person = db.Column(db.String(100), nullable=False)
     followup_date = db.Column(db.DateTime, default=datetime.datetime.utcnow)
     discussion = db.Column(db.Text, nullable=False)
@@ -121,6 +143,8 @@ class FollowUp(db.Model):
         return {
             'id': self.id,
             'franchise_id': self.franchise_id,
+            'lead_id': self.lead_id,
+            'customer_name': self.customer_name or '',
             'person': self.person,
             'followup_date': self.followup_date.strftime('%Y-%m-%d %H:%M:%S') if self.followup_date else '',
             'discussion': self.discussion,
@@ -133,7 +157,9 @@ class FollowUp(db.Model):
 class TokenRecord(db.Model):
     __tablename__ = 'token_records'
     id = db.Column(db.Integer, primary_key=True)
-    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=False)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
+    customer_name = db.Column(db.String(150), nullable=True)
     token_amount = db.Column(db.Float, nullable=False)
     payment_date = db.Column(db.String(50), nullable=False)
     payment_mode = db.Column(db.String(50), default='Bank Transfer')
@@ -148,6 +174,8 @@ class TokenRecord(db.Model):
         return {
             'id': self.id,
             'franchise_id': self.franchise_id,
+            'lead_id': self.lead_id,
+            'customer_name': self.customer_name or '',
             'token_amount': self.token_amount,
             'payment_date': self.payment_date,
             'payment_mode': self.payment_mode,

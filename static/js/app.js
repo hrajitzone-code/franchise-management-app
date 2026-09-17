@@ -313,7 +313,9 @@ function renderModulePage(pageId) {
   titleEl.innerText = titles[pageId] || 'Module Workspace';
   descEl.innerText = `Dedicated separate working page for managing ${titles[pageId] || pageId}.`;
 
-  if (pageId === 'expenses') {
+  if (pageId === 'leads') {
+    renderLeadsWorkspace(contentEl);
+  } else if (pageId === 'expenses') {
     renderExpensesWorkspace(contentEl);
   } else if (pageId === 'visit_expenses') {
     renderVisitExpensesWorkspace(contentEl);
@@ -343,6 +345,393 @@ function renderModulePage(pageId) {
     `;
   } else {
     renderGenericModuleTable(pageId, contentEl);
+  }
+}
+
+// --- LEADS & PRE-FRANCHISE INQUIRY WORKSPACE ---
+
+let allLeadsList = [];
+
+async function renderLeadsWorkspace(containerEl) {
+  containerEl.innerHTML = `
+    <!-- Top Stats / KPI Cards for Leads -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #64748B; text-transform: uppercase;">Total Inquiries</div>
+        <div id="lead-kpi-total" style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Pre-Franchise Leads</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #D97706; text-transform: uppercase;">Follow-ups Pending</div>
+        <div id="lead-kpi-followup" style="font-size: 1.5rem; font-weight: 800; color: #D97706; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Active Discussions</div>
+      </div>
+      <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #059669; text-transform: uppercase;">Token Received (₹25k)</div>
+        <div id="lead-kpi-token" style="font-size: 1.5rem; font-weight: 800; color: #059669; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #047857; margin-top: 2px;">Ready for Conversion</div>
+      </div>
+      <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #2563EB; text-transform: uppercase;">Converted Franchises</div>
+        <div id="lead-kpi-converted" style="font-size: 1.5rem; font-weight: 800; color: #2563EB; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #1D4ED8; margin-top: 2px;">Transferred to Master</div>
+      </div>
+    </div>
+
+    <!-- Filters & Action Bar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 12px 16px; border-radius: 10px;">
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex: 1;">
+        <div style="position: relative; min-width: 220px;">
+          <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #94A3B8; font-size: 0.85rem;"></i>
+          <input type="text" id="leads-search-input" placeholder="Search Customer, Mobile, City..." oninput="filterLeadsTable()" style="padding: 7px 10px 7px 32px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; width: 100%;">
+        </div>
+
+        <select id="leads-filter-status" onchange="filterLeadsTable()" style="padding: 7px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; background: #FFFFFF; font-weight: 500;">
+          <option value="ALL">All Statuses</option>
+          <option value="New">New</option>
+          <option value="Calling Pending">Calling Pending</option>
+          <option value="Connected">Connected</option>
+          <option value="Interested">Interested</option>
+          <option value="Not Interested">Not Interested</option>
+          <option value="Follow-up">Follow-up</option>
+          <option value="Token Pending">Token Pending</option>
+          <option value="Token Received">Token Received (Ready for Conversion)</option>
+          <option value="Converted to Franchise">Converted to Franchise</option>
+          <option value="Lost">Lost</option>
+        </select>
+
+        <select id="leads-filter-plan" onchange="filterLeadsTable()" style="padding: 7px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; background: #FFFFFF; font-weight: 500;">
+          <option value="ALL">All Plans</option>
+          <option value="Plan A">Plan A</option>
+          <option value="Plan B">Plan B</option>
+          <option value="Plan C">Plan C</option>
+        </select>
+
+        <select id="leads-filter-executive" onchange="filterLeadsTable()" style="padding: 7px 10px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 0.82rem; background: #FFFFFF; font-weight: 500;">
+          <option value="ALL">All Executives</option>
+        </select>
+      </div>
+
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button onclick="openBatchImportModal('leads')" style="background: #0284C7; color: #FFFFFF; border: none; padding: 8px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem; display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-file-import"></i> Auto-Import Excel/PDF
+        </button>
+        <button onclick="openLeadModal()" style="background: #2563EB; color: #FFFFFF; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem; display: flex; align-items: center; gap: 6px;">
+          <i class="fa-solid fa-user-plus"></i> + Add Pre-Franchise Inquiry
+        </button>
+      </div>
+    </div>
+
+    <!-- Leads Table Container -->
+    <div style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 10px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.83rem;">
+        <thead>
+          <tr style="background: #F8FAFC; text-align: left; color: #475569; border-bottom: 1px solid #E2E8F0;">
+            <th style="padding: 11px 14px;"># ID</th>
+            <th style="padding: 11px 14px;">Inquiry Date</th>
+            <th style="padding: 11px 14px;">Customer & Mobile</th>
+            <th style="padding: 11px 14px;">City & Location</th>
+            <th style="padding: 11px 14px;">Plan & Investment</th>
+            <th style="padding: 11px 14px;">Assigned Executive</th>
+            <th style="padding: 11px 14px;">Lead Status</th>
+            <th style="padding: 11px 14px;">Next Follow-up</th>
+            <th style="padding: 11px 14px; text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="leads-table-body">
+          <tr><td colspan="9" style="padding: 25px; text-align: center; color: #64748B;">Loading pre-franchise inquiry records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  await loadLeadsData();
+}
+
+async function loadLeadsData() {
+  try {
+    const res = await fetch('/api/leads');
+    allLeadsList = await res.json();
+    populateExecutiveFilter();
+    updateLeadKPIs();
+    renderLeadsRows(allLeadsList);
+  } catch (err) {
+    console.error("Error loading leads:", err);
+  }
+}
+
+function updateLeadKPIs() {
+  const total = allLeadsList.length;
+  const followup = allLeadsList.filter(l => l.status === 'Follow-up' || l.status === 'Calling Pending' || l.status === 'Connected').length;
+  const tokenRec = allLeadsList.filter(l => l.status === 'Token Received').length;
+  const converted = allLeadsList.filter(l => l.status === 'Converted to Franchise').length;
+
+  if (document.getElementById('lead-kpi-total')) document.getElementById('lead-kpi-total').innerText = total;
+  if (document.getElementById('lead-kpi-followup')) document.getElementById('lead-kpi-followup').innerText = followup;
+  if (document.getElementById('lead-kpi-token')) document.getElementById('lead-kpi-token').innerText = tokenRec;
+  if (document.getElementById('lead-kpi-converted')) document.getElementById('lead-kpi-converted').innerText = converted;
+}
+
+function populateExecutiveFilter() {
+  const execSelect = document.getElementById('leads-filter-executive');
+  if (!execSelect) return;
+  const execs = Array.from(new Set(allLeadsList.map(l => l.assigned_person).filter(Boolean)));
+  let html = '<option value="ALL">All Executives</option>';
+  execs.forEach(e => {
+    html += `<option value="${e}">${e}</option>`;
+  });
+  execSelect.innerHTML = html;
+}
+
+function filterLeadsTable() {
+  const search = (document.getElementById('leads-search-input')?.value || '').toLowerCase();
+  const status = document.getElementById('leads-filter-status')?.value || 'ALL';
+  const plan = document.getElementById('leads-filter-plan')?.value || 'ALL';
+  const exec = document.getElementById('leads-filter-executive')?.value || 'ALL';
+
+  const filtered = allLeadsList.filter(l => {
+    const matchSearch = !search || 
+      (l.customer_name && l.customer_name.toLowerCase().includes(search)) ||
+      (l.mobile && l.mobile.toLowerCase().includes(search)) ||
+      (l.city && l.city.toLowerCase().includes(search)) ||
+      (l.assigned_person && l.assigned_person.toLowerCase().includes(search));
+    const matchStatus = status === 'ALL' || l.status === status;
+    const matchPlan = plan === 'ALL' || l.plan_discussed === plan;
+    const matchExec = exec === 'ALL' || l.assigned_person === exec;
+    return matchSearch && matchStatus && matchPlan && matchExec;
+  });
+
+  renderLeadsRows(filtered);
+}
+
+function getLeadStatusBadge(status) {
+  const styles = {
+    'New': 'background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1;',
+    'Calling Pending': 'background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A;',
+    'Connected': 'background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE;',
+    'Interested': 'background: #F0FDF4; color: #15803D; border: 1px solid #BBF7D0;',
+    'Not Interested': 'background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA;',
+    'Follow-up': 'background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D;',
+    'Token Pending': 'background: #FFF7ED; color: #C2410C; border: 1px solid #FFEDD5;',
+    'Token Received': 'background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; font-weight: 700;',
+    'Converted to Franchise': 'background: #2563EB; color: #FFFFFF; font-weight: 700;',
+    'Lost': 'background: #F3F4F6; color: #6B7280; border: 1px solid #D1D5DB;'
+  };
+  const style = styles[status] || 'background: #F1F5F9; color: #334155;';
+  return `<span style="padding: 4px 10px; border-radius: 12px; font-size: 0.76rem; font-weight: 600; display: inline-block; ${style}">${status || 'New'}</span>`;
+}
+
+function renderLeadsRows(leads) {
+  const tbody = document.getElementById('leads-table-body');
+  if (!tbody) return;
+
+  if (!leads || leads.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="padding: 25px; text-align: center; color: #64748B;">No pre-franchise inquiry records found. Click "+ Add Pre-Franchise Inquiry" to create one.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = leads.map(l => {
+    const isTokenReceived = l.status === 'Token Received';
+    const isConverted = l.status === 'Converted to Franchise';
+    const canConvert = isTokenReceived && !isConverted;
+
+    const leadJson = JSON.stringify(l).replace(/'/g, "&apos;");
+
+    return `
+      <tr style="border-bottom: 1px solid #F1F5F9;">
+        <td style="padding: 10px 14px; font-weight: 700; color: #64748B;">#${l.id}</td>
+        <td style="padding: 10px 14px; color: #334155;">${l.inquiry_date || '-'}</td>
+        <td style="padding: 10px 14px;">
+          <div style="font-weight: 700; color: #0F172A;">${l.customer_name || 'Customer'}</div>
+          <div style="font-size: 0.78rem; color: #64748B;"><i class="fa-solid fa-phone" style="font-size: 0.7rem; color: #2563EB;"></i> ${l.mobile || '-'}</div>
+        </td>
+        <td style="padding: 10px 14px; color: #334155;">
+          <div style="font-weight: 600;">${l.city || '-'}</div>
+          <div style="font-size: 0.75rem; color: #64748B;">${l.location || l.state || ''}</div>
+        </td>
+        <td style="padding: 10px 14px;">
+          <span style="font-weight: 600; color: #2563EB;">${l.plan_discussed || 'Plan A'}</span>
+          <div style="font-size: 0.75rem; color: #64748B;">Cap: ${l.investment_capacity || '-'}</div>
+        </td>
+        <td style="padding: 10px 14px; color: #334155; font-weight: 500;">${l.assigned_person || '-'}</td>
+        <td style="padding: 10px 14px;">${getLeadStatusBadge(l.status)}</td>
+        <td style="padding: 10px 14px; color: #D97706; font-weight: 600;">${l.followup_date || '-'}</td>
+        <td style="padding: 10px 14px; text-align: right; white-space: nowrap;">
+          ${canConvert ? `
+            <button onclick="openLeadConversionModal(${l.id})" style="background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer; margin-right: 4px;" title="Convert to Official Franchise Profile">
+              <i class="fa-solid fa-store"></i> Convert to Franchise
+            </button>
+          ` : (isConverted ? `
+            <span style="font-size: 0.75rem; color: #2563EB; font-weight: 700; margin-right: 4px;"><i class="fa-solid fa-circle-check"></i> Converted</span>
+          ` : `
+            <button onclick="alert('Conversion to Franchise requires Token Status = Token Received (Min ₹25,000 Token Advance). Record token payment first.')" style="background: #F8FAFC; color: #94A3B8; border: 1px solid #E2E8F0; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 4px;" title="Requires ₹25,000 Token Advance">
+              <i class="fa-solid fa-lock"></i> Convert
+            </button>
+          `)}
+          <button onclick='openLeadModal(${leadJson})' style="background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 4px;">
+            <i class="fa-solid fa-pen"></i> Edit
+          </button>
+          <button onclick="deleteLead(${l.id})" style="background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer;">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openLeadModal(leadData = null) {
+  const modal = document.getElementById('lead-inquiry-modal');
+  if (!modal) return;
+
+  const titleEl = document.getElementById('lead-modal-title');
+  if (titleEl) {
+    titleEl.innerText = leadData ? `Edit Pre-Franchise Inquiry (#${leadData.id})` : 'Pre-Franchise Inquiry Record';
+  }
+
+  document.getElementById('lead-id').value = leadData ? leadData.id : '';
+  document.getElementById('lead-customer-name').value = leadData ? (leadData.customer_name || '') : '';
+  document.getElementById('lead-mobile').value = leadData ? (leadData.mobile || '') : '';
+  document.getElementById('lead-email').value = leadData ? (leadData.email || '') : '';
+  document.getElementById('lead-city').value = leadData ? (leadData.city || '') : '';
+  document.getElementById('lead-state').value = leadData ? (leadData.state || '') : '';
+  document.getElementById('lead-location').value = leadData ? (leadData.location || '') : '';
+  document.getElementById('lead-source').value = leadData ? (leadData.source || 'Direct Call') : 'Direct Call';
+  document.getElementById('lead-inquiry-date').value = leadData ? (leadData.inquiry_date || (new Date()).toISOString().split('T')[0]) : (new Date()).toISOString().split('T')[0];
+  document.getElementById('lead-assigned-person').value = leadData ? (leadData.assigned_person || 'Rajesh Kumar') : 'Rajesh Kumar';
+  document.getElementById('lead-existing-business').value = leadData ? (leadData.existing_business || '') : '';
+  document.getElementById('lead-interested-plan').value = leadData ? (leadData.plan_discussed || 'Plan A') : 'Plan A';
+  document.getElementById('lead-investment-capacity').value = leadData ? (leadData.investment_capacity || '') : '';
+  document.getElementById('lead-shop-availability').value = leadData ? (leadData.shop_availability || 'Available & Ready') : 'Available & Ready';
+  document.getElementById('lead-status').value = leadData ? (leadData.status || 'New') : 'New';
+  document.getElementById('lead-location-details').value = leadData ? (leadData.location_details || '') : '';
+  document.getElementById('lead-requirements').value = leadData ? (leadData.requirements || '') : '';
+  document.getElementById('lead-objections').value = leadData ? (leadData.objections || '') : '';
+  document.getElementById('lead-followup-date').value = leadData ? (leadData.followup_date || '') : '';
+  document.getElementById('lead-remarks').value = leadData ? (leadData.remarks || '') : '';
+
+  modal.style.display = 'flex';
+}
+
+function closeLeadModal() {
+  const modal = document.getElementById('lead-inquiry-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleLeadFormSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('lead-id').value;
+
+  const payload = {
+    customer_name: document.getElementById('lead-customer-name').value,
+    mobile: document.getElementById('lead-mobile').value,
+    email: document.getElementById('lead-email').value,
+    city: document.getElementById('lead-city').value,
+    state: document.getElementById('lead-state').value,
+    location: document.getElementById('lead-location').value,
+    source: document.getElementById('lead-source').value,
+    inquiry_date: document.getElementById('lead-inquiry-date').value,
+    assigned_person: document.getElementById('lead-assigned-person').value,
+    existing_business: document.getElementById('lead-existing-business').value,
+    plan_discussed: document.getElementById('lead-interested-plan').value,
+    investment_capacity: document.getElementById('lead-investment-capacity').value,
+    shop_availability: document.getElementById('lead-shop-availability').value,
+    status: document.getElementById('lead-status').value,
+    location_details: document.getElementById('lead-location-details').value,
+    requirements: document.getElementById('lead-requirements').value,
+    objections: document.getElementById('lead-objections').value,
+    followup_date: document.getElementById('lead-followup-date').value,
+    remarks: document.getElementById('lead-remarks').value
+  };
+
+  try {
+    const url = id ? `/api/leads/${id}` : '/api/leads';
+    const method = id ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      closeLeadModal();
+      loadLeadsData();
+    } else {
+      alert(data.message || 'Failed to save lead inquiry record.');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Error saving lead inquiry.');
+  }
+}
+
+function openLeadConversionModal(leadId) {
+  const lead = allLeadsList.find(l => l.id === leadId);
+  if (!lead) return;
+
+  const modal = document.getElementById('lead-conversion-modal');
+  if (!modal) return;
+
+  document.getElementById('convert-lead-id').value = lead.id;
+  document.getElementById('convert-customer-name').value = `${lead.customer_name} (${lead.mobile} - ${lead.city})`;
+  const randomCode = `FR-${Math.floor(1000 + Math.random() * 9000)}`;
+  document.getElementById('convert-franchise-code').value = randomCode;
+  document.getElementById('convert-plan-name').value = lead.plan_discussed || 'Plan A';
+  document.getElementById('convert-agreed-amount').value = 500000;
+  document.getElementById('convert-token-amount').value = 25000;
+
+  modal.style.display = 'flex';
+}
+
+function closeLeadConversionModal() {
+  const modal = document.getElementById('lead-conversion-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+async function handleLeadConversionSubmit(e) {
+  e.preventDefault();
+  const leadId = document.getElementById('convert-lead-id').value;
+  const payload = {
+    code: document.getElementById('convert-franchise-code').value,
+    plan_name: document.getElementById('convert-plan-name').value,
+    agreed_amount: parseFloat(document.getElementById('convert-agreed-amount').value || 500000),
+    token_amount: parseFloat(document.getElementById('convert-token-amount').value || 25000)
+  };
+
+  try {
+    const res = await fetch(`/api/leads/${leadId}/convert_to_franchise`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      alert(`Success! Lead converted to Franchise (${data.franchise.code} - ${data.franchise.name}).`);
+      closeLeadConversionModal();
+      await loadFranchisesList();
+      await loadLeadsData();
+    } else {
+      alert(data.message || 'Conversion failed.');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Error converting lead to franchise.');
+  }
+}
+
+async function deleteLead(leadId) {
+  if (!confirm(`Are you sure you want to delete Pre-Franchise Lead #${leadId}?`)) return;
+  try {
+    const res = await fetch(`/api/leads/${leadId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.status === 'success') {
+      loadLeadsData();
+    } else {
+      alert(data.message || 'Failed to delete lead.');
+    }
+  } catch (err) {
+    console.error(err);
+    alert('Error deleting lead.');
   }
 }
 
@@ -1186,9 +1575,11 @@ const MODULE_FIELD_CONFIG = {
 function populateFranchiseSelect(selectId, selectedVal) {
   const sel = document.getElementById(selectId);
   if (!sel) return;
-  sel.innerHTML = allFranchisesList.map(f => `
+  let optionsHtml = `<option value="" ${!selectedVal ? 'selected' : ''}>-- Pre-Franchise Inquiry (Customer) / Select Store --</option>`;
+  optionsHtml += allFranchisesList.map(f => `
     <option value="${f.id}" ${f.id == selectedVal ? 'selected' : ''}>${f.name} (${f.code}) - ${f.city}</option>
   `).join('');
+  sel.innerHTML = optionsHtml;
 }
 
 function openUniversalEntryModal(moduleKey, entryData = null) {
