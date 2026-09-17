@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/static/css/style.css?v=20260917_v3">
+  <link rel="stylesheet" href="/static/css/style.css?v=20260917_v10">
 </head>
 <body>
 
@@ -219,6 +219,20 @@
         </ul>
       </div>
     </div>
+
+    <!-- Compact Sidebar Account / Profile Controls -->
+    <div class="sidebar-user-footer">
+      <div class="user-info-wrapper">
+        <i class="fa-solid fa-circle-user user-avatar-icon"></i>
+        <div class="user-details-text">
+          <span id="current-user-fullname" class="user-fullname">Guest User</span>
+          <span id="current-role-badge" class="role-badge">Role</span>
+        </div>
+      </div>
+      <button onclick="handleLogout()" class="btn-sidebar-logout" title="Logout Session">
+        <i class="fa-solid fa-right-from-bracket"></i>
+      </button>
+    </div>
   </aside>
 
   <!-- Main Wrapper -->
@@ -231,8 +245,8 @@
           <i class="fa-solid fa-store"></i>
         </div>
         <div class="header-title-group">
-          <h1>Franchise</h1>
-          <p>Select a franchise to view complete details, history and performance.</p>
+          <h1>Franchise OS</h1>
+          <p>Select a franchise to view details, history, and performance metrics.</p>
         </div>
       </div>
 
@@ -250,43 +264,34 @@
 
     <!-- Global Combined Filters Bar -->
     <div class="filter-bar">
-      <span style="font-weight: 600; font-size: 0.85rem; color: var(--text-muted);"><i class="fa-solid fa-filter"></i> Filters:</span>
-      
-      <select id="filter-person">
-        <option value="">All Executive Persons</option>
-        <option value="Rajesh Kumar">Rajesh Kumar</option>
-        <option value="Vikram Singh">Vikram Singh</option>
-        <option value="Ananya Sharma">Ananya Sharma</option>
-        <option value="Priya Nair">Priya Nair</option>
-      </select>
+      <div class="filter-bar-left">
+        <span class="filter-bar-label"><i class="fa-solid fa-filter"></i> Filters:</span>
+        
+        <select id="filter-person">
+          <option value="">All Executive Persons</option>
+          <option value="Rajesh Kumar">Rajesh Kumar</option>
+          <option value="Vikram Singh">Vikram Singh</option>
+          <option value="Ananya Sharma">Ananya Sharma</option>
+          <option value="Priya Nair">Priya Nair</option>
+        </select>
 
-      <select id="filter-date-preset">
-        <option value="Till Now" selected>Date: Till Now (All Time)</option>
-        <option value="Today">Today</option>
-        <option value="7 Days">Last 7 Days</option>
-        <option value="30 Days">Last 30 Days</option>
-        <option value="This Month">This Month</option>
-        <option value="Quarterly">Quarterly</option>
-        <option value="Half Yearly">Half Yearly</option>
-        <option value="Yearly">Yearly</option>
-        <option value="Custom Date">Custom Date Range</option>
-      </select>
+        <select id="filter-date-preset">
+          <option value="Till Now" selected>Date: Till Now (All Time)</option>
+          <option value="Today">Today</option>
+          <option value="7 Days">Last 7 Days</option>
+          <option value="30 Days">Last 30 Days</option>
+          <option value="This Month">This Month</option>
+          <option value="Quarterly">Quarterly</option>
+          <option value="Half Yearly">Half Yearly</option>
+          <option value="Yearly">Yearly</option>
+          <option value="Custom Date">Custom Date Range</option>
+        </select>
 
-      <div id="custom-date-container" style="display: none; align-items: center; gap: 6px;">
-        <input type="date" id="custom-date-from" style="padding: 4px 8px; font-size: 0.8rem;">
-        <span style="font-size: 0.8rem;">to</span>
-        <input type="date" id="custom-date-to" style="padding: 4px 8px; font-size: 0.8rem;">
-      </div>
-
-      <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;" id="header-user-profile">
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <i class="fa-solid fa-circle-user" style="font-size: 1.2rem; color: #2563EB;"></i>
-          <span id="current-user-fullname" style="font-weight: 600; font-size: 0.85rem; color: #0F172A;">Guest User</span>
+        <div id="custom-date-container" style="display: none; align-items: center; gap: 6px;">
+          <input type="date" id="custom-date-from">
+          <span style="font-size: 0.8rem; color: #64748B;">to</span>
+          <input type="date" id="custom-date-to">
         </div>
-        <span class="role-badge" id="current-role-badge" style="background: #DBEAFE; color: #1E40AF; padding: 2px 8px; border-radius: 9999px; font-weight: 600; font-size: 0.75rem;">Role</span>
-        <button onclick="handleLogout()" title="Logout Session" style="padding: 4px 10px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600; font-size: 0.8rem; color: #DC2626; display: inline-flex; align-items: center; gap: 4px;">
-          <i class="fa-solid fa-right-from-bracket"></i> Logout
-        </button>
       </div>
     </div>
 
@@ -1126,6 +1131,6 @@
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260917_v9"></script>
+<script src="/static/js/app.js?v=20260917_v10"></script>
 </body>
 </html>
