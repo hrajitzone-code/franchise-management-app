@@ -2840,8 +2840,39 @@ async function handleLoginSubmit(e) {
     }
 
     if (res.ok && data.status === 'success') {
-      // Confirm authentication via /api/auth/me and navigate to dashboard
-      await checkAuthSession();
+      const user = data.user;
+      if (user) {
+        currentUser = user;
+        const loginScreen = document.getElementById('login-screen');
+        const appContainer = document.getElementById('app-container');
+        if (loginScreen) loginScreen.style.display = 'none';
+        if (appContainer) appContainer.style.display = 'flex';
+        
+        const nameEl = document.getElementById('current-user-fullname');
+        const roleEl = document.getElementById('current-role-badge');
+        if (nameEl) nameEl.innerText = currentUser.full_name;
+        if (roleEl) {
+          roleEl.innerText = currentUser.role;
+          if (currentUser.role === 'Super Admin') {
+            roleEl.style.background = '#FEF3C7';
+            roleEl.style.color = '#92400E';
+            roleEl.style.border = '1px solid #FCD34D';
+          } else {
+            roleEl.style.background = '#DBEAFE';
+            roleEl.style.color = '#1E40AF';
+            roleEl.style.border = '1px solid #93C5FD';
+          }
+        }
+
+        applyPermissionsToUI(currentUser);
+        restoreSidebarState();
+        initEventListeners();
+        loadDashboard();
+        loadExpenseCategories();
+        loadFranchisesList();
+      } else {
+        await checkAuthSession();
+      }
     } else {
       if (errorAlert) {
         errorAlert.innerText = data.message || 'Invalid username/email or password.';
