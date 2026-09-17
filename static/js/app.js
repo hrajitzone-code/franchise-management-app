@@ -2750,51 +2750,11 @@ async function deleteRole(roleId) {
 
 let currentUser = null;
 
-function updateAuthDiagnostics(action = '', err = null) {
-  try {
-    const loginScreen = document.getElementById('login-screen');
-    const appContainer = document.getElementById('app-container');
-    
-    const elApi = document.getElementById('diag-login-api');
-    const elUser = document.getElementById('diag-current-user');
-    const elAuth = document.getElementById('diag-auth-state');
-    const elLogin = document.getElementById('diag-login-screen');
-    const elApp = document.getElementById('diag-app-container');
-    const elAction = document.getElementById('diag-last-action');
-    const elErr = document.getElementById('diag-last-error');
-
-    if (elUser) elUser.innerText = currentUser ? `${currentUser.full_name} (${currentUser.username})` : 'NONE';
-    if (elAuth) {
-      elAuth.innerText = currentUser ? 'AUTHENTICATED' : 'UNAUTHENTICATED';
-      elAuth.style.color = currentUser ? '#34D399' : '#F59E0B';
-    }
-    if (elLogin && loginScreen) elLogin.innerText = (loginScreen.style.display || 'flex').toUpperCase();
-    if (elApp && appContainer) elApp.innerText = (appContainer.style.display || 'none').toUpperCase();
-    if (elAction && action) elAction.innerText = action;
-    if (err) {
-      if (elErr) {
-        elErr.innerText = String(err.message || err);
-        elErr.style.color = '#F87171';
-      }
-    }
-  } catch(e) {}
-}
-
-window.addEventListener('error', (event) => {
-  const elErr = document.getElementById('diag-last-error');
-  if (elErr) {
-    elErr.innerText = `${event.message} at ${event.filename}:${event.lineno}`;
-    elErr.style.color = '#F87171';
-  }
-});
-
 async function checkAuthSession() {
-  updateAuthDiagnostics('CHECKING SESSION');
   try {
     const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
     if (!res.ok) {
       showLoginScreen();
-      updateAuthDiagnostics('SESSION CHECK FAILED (HTTP ' + res.status + ')');
       return;
     }
     const data = await res.json();
@@ -2827,15 +2787,11 @@ async function checkAuthSession() {
       try { loadDashboard(); } catch(e) { console.error(e); }
       try { loadExpenseCategories(); } catch(e) { console.error(e); }
       try { loadFranchisesList(); } catch(e) { console.error(e); }
-
-      updateAuthDiagnostics('SESSION CONFIRMED');
     } else {
       showLoginScreen();
-      updateAuthDiagnostics('UNAUTHENTICATED SESSION');
     }
   } catch (err) {
     console.error('Error checking auth session:', err);
-    updateAuthDiagnostics('SESSION EXCEPTION', err);
     showLoginScreen();
   }
 }
@@ -2846,17 +2802,13 @@ function showLoginScreen() {
   const appContainer = document.getElementById('app-container');
   if (loginScreen) loginScreen.style.display = 'flex';
   if (appContainer) appContainer.style.display = 'none';
-  updateAuthDiagnostics('SHOW LOGIN SCREEN');
 }
 
 async function handleLoginSubmit(e) {
-  updateAuthDiagnostics('BUTTON CLICKED / FORM SUBMITTED');
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
   }
-
-  updateAuthDiagnostics('LOGIN HANDLER STARTED');
 
   const usernameInput = document.getElementById('login-username');
   const passwordInput = document.getElementById('login-password');
@@ -2864,10 +2816,8 @@ async function handleLoginSubmit(e) {
   const password = passwordInput?.value.trim() || '';
   const errorAlert = document.getElementById('login-error-alert');
   const btn = document.getElementById('login-btn');
-  const diagApi = document.getElementById('diag-login-api');
 
   if (!username || !password) {
-    updateAuthDiagnostics('CREDENTIALS READ: MISSING VALUES');
     if (errorAlert) {
       errorAlert.innerText = 'Please enter both Username/Email and Password.';
       errorAlert.style.display = 'block';
@@ -2875,15 +2825,11 @@ async function handleLoginSubmit(e) {
     return;
   }
 
-  updateAuthDiagnostics('CREDENTIALS READ: ' + username);
-
   if (errorAlert) errorAlert.style.display = 'none';
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing In...';
   }
-  if (diagApi) diagApi.innerText = 'FETCHING...';
-  updateAuthDiagnostics('LOGIN API REQUEST SENT');
 
   try {
     const res = await fetch('/api/auth/login', {
@@ -2892,9 +2838,6 @@ async function handleLoginSubmit(e) {
       credentials: 'same-origin',
       body: JSON.stringify({ username, password })
     });
-
-    if (diagApi) diagApi.innerText = 'RESPONSE (' + res.status + ')';
-    updateAuthDiagnostics('LOGIN API RESPONSE RECEIVED (HTTP ' + res.status + ')');
 
     let data;
     const rawText = await res.text();
@@ -2905,13 +2848,9 @@ async function handleLoginSubmit(e) {
     }
 
     if (res.ok && data.status === 'success') {
-      if (diagApi) diagApi.innerText = 'SUCCESS (200)';
-      updateAuthDiagnostics('LOGIN SUCCESS');
-      
       const user = data.user;
       if (user) {
         currentUser = user;
-        updateAuthDiagnostics('CURRENT USER SET: ' + user.full_name);
 
         const loginScreen = document.getElementById('login-screen');
         const appContainer = document.getElementById('app-container');
@@ -2940,27 +2879,21 @@ async function handleLoginSubmit(e) {
         try { loadDashboard(); } catch(e) { console.error(e); }
         try { loadExpenseCategories(); } catch(e) { console.error(e); }
         try { loadFranchisesList(); } catch(e) { console.error(e); }
-
-        updateAuthDiagnostics('DASHBOARD SHOWN');
       } else {
         await checkAuthSession();
       }
     } else {
-      if (diagApi) diagApi.innerText = 'FAILED (' + res.status + ')';
       if (errorAlert) {
         errorAlert.innerText = data.message || 'Invalid username/email or password.';
         errorAlert.style.display = 'block';
       }
-      updateAuthDiagnostics('LOGIN FAILED');
     }
   } catch (err) {
     console.error('Login error:', err);
-    if (diagApi) diagApi.innerText = 'ERROR';
     if (errorAlert) {
       errorAlert.innerText = 'Network connection error. Please try again.';
       errorAlert.style.display = 'block';
     }
-    updateAuthDiagnostics('LOGIN EXCEPTION: ' + (err.message || err));
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -2976,7 +2909,6 @@ async function handleLogout() {
     console.error('Logout error:', err);
   } finally {
     showLoginScreen();
-    updateAuthDiagnostics('LOGOUT COMPLETED');
   }
 }
 
