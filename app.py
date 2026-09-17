@@ -597,6 +597,7 @@ def manage_franchises():
         plan_name = data.get('plan_name', 'Plan A')
         status = data.get('status', 'Active')
         agreed_amount = float(data.get('agreed_amount', 500000.0))
+        l_id = int(data.get('lead_id')) if data.get('lead_id') else None
 
         franchise = Franchise(
             code=code, name=name, owner_name=owner_name, owner_mobile=owner_mobile,
@@ -604,6 +605,17 @@ def manage_franchises():
             plan_name=plan_name, status=status, agreed_amount=agreed_amount
         )
         db.session.add(franchise)
+        db.session.flush()
+
+        if l_id:
+            lead = Lead.query.get(l_id)
+            if lead:
+                lead.franchise_id = franchise.id
+                lead.status = 'Converted to Franchise'
+                CallHistory.query.filter((CallHistory.lead_id == lead.id) | (CallHistory.customer_name == lead.customer_name)).update({CallHistory.franchise_id: franchise.id}, synchronize_session=False)
+                FollowUp.query.filter((FollowUp.lead_id == lead.id) | (FollowUp.customer_name == lead.customer_name)).update({FollowUp.franchise_id: franchise.id}, synchronize_session=False)
+                TokenRecord.query.filter((TokenRecord.lead_id == lead.id) | (TokenRecord.customer_name == lead.customer_name)).update({TokenRecord.franchise_id: franchise.id}, synchronize_session=False)
+
         db.session.commit()
 
         log_audit(franchise.id, 'Franchise Creation', 'CREATE', assigned_person, 'Franchise', None, name, f"Created Franchise {name} ({code})")
@@ -1234,9 +1246,14 @@ def update_delete_complaint(c_id):
 def manage_followups():
     if request.method == 'POST':
         data = request.json or request.form
-        f_id = int(data.get('franchise_id', 1))
+        f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
+        l_id = int(data.get('lead_id')) if data.get('lead_id') else None
+        c_name = data.get('customer_name') or ''
+
         follow = FollowUp(
             franchise_id=f_id,
+            lead_id=l_id,
+            customer_name=c_name,
             person=data.get('person', 'Executive'),
             discussion=data.get('discussion', ''),
             outcome=data.get('outcome', ''),
@@ -1245,8 +1262,14 @@ def manage_followups():
             remarks=data.get('remarks', '')
         )
         db.session.add(follow)
+
+        if l_id and follow.next_date:
+            lead = Lead.query.get(l_id)
+            if lead:
+                lead.followup_date = follow.next_date
+
         db.session.commit()
-        log_audit(f_id, 'Follow-ups', 'CREATE', follow.person, 'Followup Entry', None, follow.discussion[:30], 'Created Followup Log')
+        log_audit(f_id or 1, 'Follow-ups', 'CREATE', follow.person, 'Followup Entry', None, (follow.discussion or '')[:30], 'Created Followup Log')
         return jsonify({'status': 'success', 'followup': follow.to_dict()})
     
     followups = FollowUp.query.order_by(FollowUp.followup_date.desc()).all()
@@ -1258,7 +1281,7 @@ def update_delete_followup(f_id):
     if request.method == 'DELETE':
         db.session.delete(f)
         db.session.commit()
-        log_audit(f.franchise_id, 'Follow-ups', 'DELETE', 'Admin', 'Followup Record', f.discussion[:30], 'Deleted', f"Deleted Followup #{f_id}")
+        log_audit(f.franchise_id or 1, 'Follow-ups', 'DELETE', 'Admin', 'Followup Record', (f.discussion or '')[:30], 'Deleted', f"Deleted Followup #{f_id}")
         return jsonify({'status': 'success', 'message': f"Followup #{f_id} deleted."})
     
     data = request.json
@@ -1269,7 +1292,7 @@ def update_delete_followup(f_id):
     f.status = data.get('status', f.status)
     f.remarks = data.get('remarks', f.remarks)
     db.session.commit()
-    log_audit(f.franchise_id, 'Follow-ups', 'UPDATE', f.person, 'Followup Record', None, f.discussion[:30], f"Updated Followup #{f_id}")
+    log_audit(f.franchise_id or 1, 'Follow-ups', 'UPDATE', f.person, 'Followup Record', None, (f.discussion or '')[:30], f"Updated Followup #{f_id}")
     return jsonify({'status': 'success', 'followup': f.to_dict()})
 
 # --- TOKEN & PAYMENTS ---
@@ -1278,8 +1301,14 @@ def update_delete_followup(f_id):
 def manage_tokens():
     if request.method == 'POST':
         data = request.json or request.form
+        f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
+        l_id = int(data.get('lead_id')) if data.get('lead_id') else None
+        c_name = data.get('customer_name') or ''
+
         t = TokenRecord(
-            franchise_id=int(data.get('franchise_id', 1)),
+            franchise_id=f_id,
+            lead_id=l_id,
+            customer_name=c_name,
             token_amount=float(data.get('token_amount', 0.0)),
             payment_date=data.get('payment_date', datetime.date.today().strftime('%Y-%m-%d')),
             payment_mode=data.get('payment_mode', 'Bank Transfer'),
@@ -1289,8 +1318,14 @@ def manage_tokens():
             person=data.get('person', 'Executive')
         )
         db.session.add(t)
+
+        if l_id and t.token_amount >= 25000 and t.status == 'Received':
+            lead = Lead.query.get(l_id)
+            if lead and lead.status != 'Converted to Franchise':
+                lead.status = 'Token Received'
+
         db.session.commit()
-        log_audit(t.franchise_id, 'Token Advance', 'CREATE', t.person, 'Token Record', None, f"Rs.{t.token_amount}", 'Recorded Token Payment')
+        log_audit(f_id or 1, 'Token Advance', 'CREATE', t.person, 'Token Record', None, f"Rs.{t.token_amount}", 'Recorded Token Payment')
         return jsonify({'status': 'success', 'token': t.to_dict()})
 
     tokens = TokenRecord.query.order_by(TokenRecord.created_at.desc()).all()

@@ -63,6 +63,10 @@ async function loadFranchisesList() {
   try {
     const res = await fetch('/api/franchises');
     allFranchisesList = await res.json();
+    try {
+      const lRes = await fetch('/api/leads');
+      allLeadsList = await lRes.json();
+    } catch(lErr) { console.error('Error loading leads list:', lErr); }
   } catch (err) {
     console.error('Error loading franchises list:', err);
   }
@@ -580,6 +584,89 @@ function renderLeadsRows(leads) {
   }).join('');
 }
 
+// --- INDIAN STATES & CITIES DATA DICTIONARY ---
+
+const INDIA_STATE_CITIES = {
+  "Gujarat": ["Ahmedabad", "Surat", "Vadodara", "Rajkot", "Bhavnagar", "Jamnagar", "Gandhinagar", "Junagadh", "Anand", "Navsari", "Morbi", "Nadiad", "Surendranagar", "Bharuch", "Mehsana", "Porbandar", "Vapi", "Other City"],
+  "Maharashtra": ["Mumbai", "Pune", "Nagpur", "Nashik", "Thane", "Chhatrapati Sambhajinagar (Aurangabad)", "Solapur", "Amravati", "Navi Mumbai", "Kolhapur", "Sangli", "Jalgaon", "Akola", "Latur", "Dhule", "Ahmednagar", "Chandrapur", "Parbhani", "Ichalkaranji", "Jalna", "Palghar", "Nanded", "Other City"],
+  "Delhi": ["New Delhi", "North Delhi", "South Delhi", "East Delhi", "West Delhi", "Central Delhi", "Noida (NCR)", "Gurugram (NCR)", "Faridabad (NCR)", "Ghaziabad (NCR)", "Greater Noida (NCR)", "Other City"],
+  "Rajasthan": ["Jaipur", "Jodhpur", "Udaipur", "Kota", "Bikaner", "Ajmer", "Bhilwara", "Alwar", "Sikar", "Sri Ganganagar", "Pali", "Chittorgarh", "Tonk", "Kishangarh", "Beawar", "Jhunjhunu", "Other City"],
+  "Uttar Pradesh": ["Lucknow", "Kanpur", "Agra", "Varanasi", "Meerut", "Prayagraj (Allahabad)", "Bareilly", "Aligarh", "Moradabad", "Saharanpur", "Gorakhpur", "Noida", "Ghaziabad", "Jhansi", "Muzaffarnagar", "Mathura", "Firozabad", "Rampur", "Shahjahanpur", "Ayodhya", "Farrukhabad", "Other City"],
+  "Madhya Pradesh": ["Bhopal", "Indore", "Jabalpur", "Gwalior", "Ujjain", "Sagar", "Dewas", "Satna", "Ratlam", "Rewa", "Murwara (Katni)", "Singrauli", "Burhanpur", "Khandwa", "Bhind", "Chhindwara", "Guna", "Shivpuri", "Vidisha", "Chhatarpur", "Damoh", "Mandsaur", "Other City"],
+  "Punjab": ["Ludhiana", "Amritsar", "Jalandhar", "Patiala", "Bathinda", "Mohali", "Hoshiarpur", "Batala", "Pathankot", "Moga", "Abohar", "Khanna", "Phagwara", "Muktsar", "Barnala", "Firozpur", "Kapurthala", "Sangrur", "Other City"],
+  "Haryana": ["Gurugram", "Faridabad", "Panipat", "Ambala", "Yamunanagar", "Rohtak", "Hisar", "Karnal", "Sonipat", "Panchkula", "Bhiwani", "Sirsa", "Bahadurgarh", "Jind", "Thanesar", "Kaithal", "Rewari", "Palwal", "Other City"],
+  "Karnataka": ["Bengaluru", "Mysuru", "Hubballi-Dharwad", "Mangaluru", "Belagavi", "Kalaburagi (Gulbarga)", "Davanagere", "Ballari", "Vijayapura", "Shivamogga", "Tumakuru", "Raichur", "Bidar", "Hosapete", "Hassan", "Gadag", "Udupi", "Other City"],
+  "Tamil Nadu": ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem", "Tiruppur", "Erode", "Vellore", "Tirunelveli", "Thoothukudi", "Nagercoil", "Thanjavur", "Dindigul", "Cuddalore", "Kanchipuram", "Ranipet", "Karur", "Other City"],
+  "West Bengal": ["Kolkata", "Howrah", "Durgapur", "Asansol", "Siliguri", "Bardhaman", "Malda", "Baharampur", "Habra", "Kharagpur", "Shantipur", "Dankuni", "Dhulian", "Ranaghat", "Haldia", "Raiganj", "Krishnanagar", "Nabadwip", "Midnapore", "Other City"],
+  "Telangana": ["Hyderabad", "Warangal", "Nizamabad", "Khammam", "Karimnagar", "Ramagundam", "Mahbubnagar", "Nalgonda", "Adilabad", "Suryapet", "Siddipet", "Miryalaguda", "Jagtial", "Other City"],
+  "Bihar": ["Patna", "Gaya", "Bhagalpur", "Muzaffarpur", "Purnia", "Darbhanga", "Bihar Sharif", "Arrah", "Begusarai", "Katihar", "Munger", "Chhapra", "Danapur", "Bettiah", "Saharsa", "Sasaram", "Hajipur", "Dehri", "Siwan", "Motihari", "Nawada", "Other City"],
+  "Andhra Pradesh": ["Visakhapatnam", "Vijayawada", "Guntur", "Nellore", "Kurnool", "Kakinada", "Rajamahendravaram", "Kadapa", "Tirupati", "Anantapur", "Vizianagaram", "Eluru", "Nandyal", "Ongole", "Adoni", "Machilipatnam", "Tenali", "Proddatur", "Chittoor", "Hindupur", "Other City"],
+  "Kerala": ["Thiruvananthapuram", "Kochi", "Kozhikode", "Kollam", "Thrissur", "Kannur", "Alappuzha", "Kottayam", "Palakkad", "Manjeri", "Thalassery", "Ponnani", "Vatakara", "Kanhangad", "Payyanur", "Koyilandy", "Other City"],
+  "Odisha": ["Bhubaneswar", "Cuttack", "Rourkela", "Berhampur", "Sambalpur", "Puri", "Balasore", "Bhadrak", "Baripada", "Jharsuguda", "Jeypore", "Bargarh", "Rayagada", "Other City"],
+  "Assam": ["Guwahati", "Silchar", "Dibrugarh", "Jorhat", "Nagaon", "Tinsukia", "Tezpur", "Bongaigaon", "Dhubri", "Diphu", "North Lakhimpur", "Karimganj", "Sivasagar", "Goalpara", "Other City"],
+  "Jharkhand": ["Ranchi", "Jamshedpur", "Dhanbad", "Bokaro Steel City", "Deoghar", "Phusro", "Hazaribagh", "Giridih", "Ramgarh", "Medininagar (Daltonganj)", "Chirkunda", "Other City"],
+  "Chhattisgarh": ["Raipur", "Bhilai", "Bilaspur", "Korba", "Rajnandgaon", "Raigarh", "Jagdalpur", "Ambikapur", "Dhamtari", "Chirmiri", "Bhatapara", "Other City"],
+  "Uttarakhand": ["Dehradun", "Haridwar", "Roorkee", "Haldwani", "Rudrapur", "Kashipur", "Rishikesh", "Other City"],
+  "Himachal Pradesh": ["Shimla", "Mandi", "Solan", "Dharamshala", "Baddi", "Kullu", "Hamirpur", "Other City"],
+  "Jammu & Kashmir": ["Srinagar", "Jammu", "Anantnag", "Baramulla", "Kathua", "Udhampur", "Sopore", "Other City"],
+  "Goa": ["Panaji", "Margao", "Vasco da Gama", "Mapusa", "Ponda", "Other City"],
+  "Other State": ["Other City"]
+};
+
+function handleLeadStateChange(stateVal, selectedCity = '') {
+  const citySel = document.getElementById('lead-city');
+  const customInput = document.getElementById('lead-custom-city');
+  if (!citySel) return;
+
+  const cities = INDIA_STATE_CITIES[stateVal] || ["Other City"];
+  let html = '<option value="" disabled>-- Select City --</option>';
+  cities.forEach(c => {
+    html += `<option value="${c}">${c}</option>`;
+  });
+  citySel.innerHTML = html;
+
+  if (selectedCity && cities.includes(selectedCity)) {
+    citySel.value = selectedCity;
+    if (customInput) customInput.style.display = 'none';
+  } else if (selectedCity) {
+    citySel.value = "Other City";
+    if (customInput) {
+      customInput.style.display = 'block';
+      customInput.value = selectedCity;
+    }
+  } else {
+    if (cities.length > 0) citySel.selectedIndex = 1;
+    if (customInput) customInput.style.display = 'none';
+  }
+}
+
+function handleLeadCityChange(cityVal) {
+  const customInput = document.getElementById('lead-custom-city');
+  if (!customInput) return;
+  if (cityVal === 'Other City') {
+    customInput.style.display = 'block';
+    customInput.focus();
+  } else {
+    customInput.style.display = 'none';
+  }
+}
+
+let callerModalContext = null;
+
+function openLeadModalFromCaller() {
+  callerModalContext = 'universal';
+  const univModal = document.getElementById('universal-entry-modal');
+  if (univModal) univModal.style.display = 'none';
+  openLeadModal();
+}
+
+function openLeadModalFromAddFranchise() {
+  callerModalContext = 'addFranchise';
+  const addFModal = document.getElementById('add-franchise-modal');
+  if (addFModal) addFModal.style.display = 'none';
+  openLeadModal();
+}
+
 function openLeadModal(leadData = null) {
   const modal = document.getElementById('lead-inquiry-modal');
   if (!modal) return;
@@ -593,8 +680,15 @@ function openLeadModal(leadData = null) {
   document.getElementById('lead-customer-name').value = leadData ? (leadData.customer_name || '') : '';
   document.getElementById('lead-mobile').value = leadData ? (leadData.mobile || '') : '';
   document.getElementById('lead-email').value = leadData ? (leadData.email || '') : '';
-  document.getElementById('lead-city').value = leadData ? (leadData.city || '') : '';
-  document.getElementById('lead-state').value = leadData ? (leadData.state || '') : '';
+
+  const stateVal = leadData ? (leadData.state || 'Gujarat') : 'Gujarat';
+  const cityVal = leadData ? (leadData.city || '') : '';
+  const stateEl = document.getElementById('lead-state');
+  if (stateEl) {
+    stateEl.value = stateVal;
+    handleLeadStateChange(stateVal, cityVal);
+  }
+
   document.getElementById('lead-location').value = leadData ? (leadData.location || '') : '';
   document.getElementById('lead-source').value = leadData ? (leadData.source || 'Direct Call') : 'Direct Call';
   document.getElementById('lead-inquiry-date').value = leadData ? (leadData.inquiry_date || (new Date()).toISOString().split('T')[0]) : (new Date()).toISOString().split('T')[0];
@@ -622,11 +716,16 @@ async function handleLeadFormSubmit(e) {
   e.preventDefault();
   const id = document.getElementById('lead-id').value;
 
+  let cityVal = document.getElementById('lead-city')?.value || '';
+  if (cityVal === 'Other City') {
+    cityVal = document.getElementById('lead-custom-city')?.value || 'Other City';
+  }
+
   const payload = {
     customer_name: document.getElementById('lead-customer-name').value,
     mobile: document.getElementById('lead-mobile').value,
     email: document.getElementById('lead-email').value,
-    city: document.getElementById('lead-city').value,
+    city: cityVal,
     state: document.getElementById('lead-state').value,
     location: document.getElementById('lead-location').value,
     source: document.getElementById('lead-source').value,
@@ -655,7 +754,16 @@ async function handleLeadFormSubmit(e) {
     const data = await res.json();
     if (data.status === 'success') {
       closeLeadModal();
-      loadLeadsData();
+      await loadLeadsData();
+
+      if (callerModalContext === 'universal') {
+        callerModalContext = null;
+        const moduleKey = document.getElementById('entry-module-key')?.value || 'calling';
+        openUniversalEntryModal(moduleKey, null, data.lead ? data.lead.id : null);
+      } else if (callerModalContext === 'addFranchise') {
+        callerModalContext = null;
+        openNewFranchiseModal(data.lead ? data.lead.id : null);
+      }
     } else {
       alert(data.message || 'Failed to save lead inquiry record.');
     }
@@ -1575,14 +1683,39 @@ const MODULE_FIELD_CONFIG = {
 function populateFranchiseSelect(selectId, selectedVal) {
   const sel = document.getElementById(selectId);
   if (!sel) return;
-  let optionsHtml = `<option value="" ${!selectedVal ? 'selected' : ''}>-- Pre-Franchise Inquiry (Customer) / Select Store --</option>`;
-  optionsHtml += allFranchisesList.map(f => `
-    <option value="${f.id}" ${f.id == selectedVal ? 'selected' : ''}>${f.name} (${f.code}) - ${f.city}</option>
-  `).join('');
+
+  let optionsHtml = '';
+  
+  // Group 1: Pre-Franchise Inquiry Leads
+  if (allLeadsList && allLeadsList.length > 0) {
+    optionsHtml += '<optgroup label="-- PRE-FRANCHISE INQUIRY LEADS (CUSTOMERS) --">';
+    allLeadsList.forEach(l => {
+      const valStr = `LEAD_${l.id}`;
+      const isSel = (selectedVal === valStr || selectedVal == l.id || selectedVal === `LEAD_${l.id}`);
+      optionsHtml += `<option value="LEAD_${l.id}" ${isSel ? 'selected' : ''}>[Lead #${l.id}] ${l.customer_name} (${l.mobile} - ${l.city || 'No City'})</option>`;
+    });
+    optionsHtml += '</optgroup>';
+  }
+
+  // Group 2: Active Franchises
+  if (allFranchisesList && allFranchisesList.length > 0) {
+    optionsHtml += '<optgroup label="-- OFFICIAL FRANCHISE STORES --">';
+    allFranchisesList.forEach(f => {
+      const valStr = `FRAN_${f.id}`;
+      const isSel = (selectedVal === valStr || selectedVal == f.id || selectedVal === `FRAN_${f.id}`);
+      optionsHtml += `<option value="FRAN_${f.id}" ${isSel ? 'selected' : ''}>[Franchise] ${f.name} (${f.code}) - ${f.city}</option>`;
+    });
+    optionsHtml += '</optgroup>';
+  }
+
+  if (!optionsHtml) {
+    optionsHtml = '<option value="">No leads or franchises available</option>';
+  }
+
   sel.innerHTML = optionsHtml;
 }
 
-function openUniversalEntryModal(moduleKey, entryData = null) {
+function openUniversalEntryModal(moduleKey, entryData = null, autoSelectLeadId = null) {
   const modal = document.getElementById('universal-entry-modal');
   if (!modal) return;
 
@@ -1602,7 +1735,24 @@ function openUniversalEntryModal(moduleKey, entryData = null) {
     titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square" style="color: var(--accent-blue);"></i> <span>${entryData ? 'Edit ' + cfg.title : 'Add New ' + cfg.title}</span>`;
   }
 
-  populateFranchiseSelect('entry-franchise-id', entryData ? (entryData.franchise_id || activeFranchiseId) : (activeFranchiseId || (allFranchisesList[0] ? allFranchisesList[0].id : 1)));
+  const btnAddLead = document.getElementById('btn-modal-add-lead');
+  const labelFranchise = document.getElementById('entry-franchise-label');
+  if (['calling', 'followup', 'token', 'plans', 'leads', 'survey', 'agreement'].includes(moduleKey)) {
+    if (btnAddLead) btnAddLead.style.display = 'inline-flex';
+    if (labelFranchise) labelFranchise.innerHTML = 'Customer / Pre-Franchise Lead <span style="color: red;">*</span>';
+  } else {
+    if (btnAddLead) btnAddLead.style.display = 'none';
+    if (labelFranchise) labelFranchise.innerHTML = 'Franchise Store <span style="color: red;">*</span>';
+  }
+
+  let selVal = entryData ? (entryData.franchise_id ? `FRAN_${entryData.franchise_id}` : (entryData.lead_id ? `LEAD_${entryData.lead_id}` : null)) : null;
+  if (!selVal && autoSelectLeadId) {
+    selVal = `LEAD_${autoSelectLeadId}`;
+  } else if (!selVal && activeFranchiseId) {
+    selVal = `FRAN_${activeFranchiseId}`;
+  }
+
+  populateFranchiseSelect('entry-franchise-id', selVal);
 
   document.getElementById('entry-person').value = entryData ? (entryData.person || entryData.assigned_person || entryData.caller_person || entryData.surveyor_name || 'Rajesh Kumar') : 'Rajesh Kumar';
   document.getElementById('entry-date').value = entryData ? (entryData.payment_date || entryData.expense_date || entryData.purchase_date || entryData.return_date || entryData.installation_date || entryData.date_given || entryData.date_provided || datetime_today()) : datetime_today();
@@ -1638,7 +1788,23 @@ async function handleUniversalEntrySubmit(evt) {
   const entryId = document.getElementById('entry-id').value;
   const cfg = MODULE_FIELD_CONFIG[moduleKey] || { endpoint: '/api/leads' };
 
-  const franchiseId = document.getElementById('entry-franchise-id').value;
+  const selectedTargetVal = document.getElementById('entry-franchise-id').value;
+  let franchiseId = null;
+  let leadId = null;
+  let customerName = '';
+
+  if (selectedTargetVal.startsWith('LEAD_')) {
+    leadId = parseInt(selectedTargetVal.replace('LEAD_', ''));
+    const matchedLead = allLeadsList.find(l => l.id === leadId);
+    if (matchedLead) customerName = matchedLead.customer_name;
+  } else if (selectedTargetVal.startsWith('FRAN_')) {
+    franchiseId = parseInt(selectedTargetVal.replace('FRAN_', ''));
+    const matchedFranchise = allFranchisesList.find(f => f.id === franchiseId);
+    if (matchedFranchise) customerName = matchedFranchise.owner_name;
+  } else if (selectedTargetVal) {
+    franchiseId = parseInt(selectedTargetVal);
+  }
+
   const person = document.getElementById('entry-person').value;
   const dateVal = document.getElementById('entry-date').value;
   const val1 = document.getElementById('entry-field-1').value;
@@ -1648,7 +1814,9 @@ async function handleUniversalEntrySubmit(evt) {
   const remarks = document.getElementById('entry-remarks').value;
 
   const jsonPayload = {
-    franchise_id: parseInt(franchiseId),
+    franchise_id: franchiseId,
+    lead_id: leadId,
+    customer_name: customerName,
     person: person,
     assigned_person: person,
     caller_person: person,
@@ -3360,7 +3528,36 @@ function applyPermissionsToUI(user) {
 
 // --- ADD FRANCHISE MODAL HANDLERS ---
 
-function openNewFranchiseModal() {
+function populateAddFranchiseLeadSelect(selectedLeadId = null) {
+  const sel = document.getElementById('add-f-lead-id');
+  if (!sel) return;
+  let html = '<option value="">-- Select from Pre-Franchise Leads (Auto-fill) --</option>';
+  if (allLeadsList && allLeadsList.length > 0) {
+    allLeadsList.forEach(l => {
+      const isSel = selectedLeadId == l.id;
+      html += `<option value="${l.id}" ${isSel ? 'selected' : ''}>[Lead #${l.id}] ${l.customer_name} (${l.mobile} - ${l.city || 'No City'})</option>`;
+    });
+  }
+  sel.innerHTML = html;
+}
+
+function autoFillFranchiseFromLead(leadIdStr) {
+  if (!leadIdStr) return;
+  const leadId = parseInt(leadIdStr);
+  const lead = allLeadsList.find(l => l.id === leadId);
+  if (!lead) return;
+
+  document.getElementById('add-f-owner-name').value = lead.customer_name || '';
+  document.getElementById('add-f-owner-mobile').value = lead.mobile || '';
+  document.getElementById('add-f-owner-email').value = lead.email || '';
+  document.getElementById('add-f-name').value = `Ajit Zone - ${lead.city || lead.customer_name}`;
+  document.getElementById('add-f-city').value = lead.city || '';
+  document.getElementById('add-f-state').value = lead.state || '';
+  document.getElementById('add-f-assigned-person').value = lead.assigned_person || 'Priya Sharma';
+  document.getElementById('add-f-plan-name').value = lead.plan_discussed || 'Standard Plan';
+}
+
+function openNewFranchiseModal(autoSelectLeadId = null) {
   const modal = document.getElementById('add-franchise-modal');
   if (modal) {
     document.getElementById('add-f-code').value = `FR-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -3374,6 +3571,12 @@ function openNewFranchiseModal() {
     document.getElementById('add-f-plan-name').value = 'Standard Plan';
     document.getElementById('add-f-agreed-amount').value = 500000;
     document.getElementById('add-f-status').value = 'Active';
+
+    populateAddFranchiseLeadSelect(autoSelectLeadId);
+    if (autoSelectLeadId) {
+      autoFillFranchiseFromLead(autoSelectLeadId);
+    }
+
     modal.style.display = 'flex';
   }
 }
@@ -3385,6 +3588,7 @@ function closeNewFranchiseModal() {
 
 async function handleNewFranchiseSubmit(evt) {
   evt.preventDefault();
+  const leadIdVal = document.getElementById('add-f-lead-id')?.value;
   const payload = {
     code: document.getElementById('add-f-code').value.trim(),
     name: document.getElementById('add-f-name').value.trim(),
@@ -3396,7 +3600,8 @@ async function handleNewFranchiseSubmit(evt) {
     assigned_person: document.getElementById('add-f-assigned-person').value.trim(),
     plan_name: document.getElementById('add-f-plan-name').value,
     agreed_amount: parseFloat(document.getElementById('add-f-agreed-amount').value || 500000),
-    status: document.getElementById('add-f-status').value
+    status: document.getElementById('add-f-status').value,
+    lead_id: leadIdVal ? parseInt(leadIdVal) : null
   };
 
   try {
@@ -3411,6 +3616,7 @@ async function handleNewFranchiseSubmit(evt) {
       closeNewFranchiseModal();
       loadDashboard();
       loadFranchisesList();
+      if (typeof loadLeadsData === 'function') loadLeadsData();
     } else {
       alert(data.error || 'Failed to create franchise');
     }
