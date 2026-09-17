@@ -829,3 +829,70 @@ body {
 .custom-table tr:hover {
   background-color: #F1F5F9;
 }
+
+/* --- RESPONSIVE LAYOUTS, MODALS & TOUCH STYLES --- */
+* {
+  box-sizing: border-box;
+}
+
+input, select, textarea, button {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.table-responsive-wrapper {
+  overflow-x: auto;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 1024px) {
+  .kpi-cards-row {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+@media (max-width: 768px) {
+  #sidebar {
+    position: fixed;
+    left: -260px;
+    height: 100vh;
+    z-index: 10000;
+  }
+  
+  #sidebar.mobile-open {
+    left: 0;
+  }
+
+  .kpi-cards-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .form-grid-2,
+  form[style*="grid-template-columns: 1fr 1fr"],
+  div[style*="grid-template-columns: 1fr 1fr"],
+  div[style*="grid-template-columns: repeat(2, 1fr)"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  .modal-dialog-content {
+    width: 95% !important;
+    padding: 16px 18px !important;
+    max-height: 90vh !important;
+  }
+
+  .action-buttons-flex {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .action-buttons-flex button {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .kpi-cards-row {
+    grid-template-columns: 1fr !important;
+  }
+}
