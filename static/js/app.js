@@ -2851,14 +2851,24 @@ function showLoginScreen() {
 }
 
 async function handleLoginSubmit(e) {
-  if (e && typeof e.preventDefault === 'function') e.preventDefault();
-  const username = document.getElementById('login-username')?.value.trim();
-  const password = document.getElementById('login-password')?.value.trim();
+  updateAuthDiagnostics('BUTTON CLICKED / FORM SUBMITTED');
+  if (e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+  }
+
+  updateAuthDiagnostics('LOGIN HANDLER STARTED');
+
+  const usernameInput = document.getElementById('login-username');
+  const passwordInput = document.getElementById('login-password');
+  const username = usernameInput?.value.trim() || '';
+  const password = passwordInput?.value.trim() || '';
   const errorAlert = document.getElementById('login-error-alert');
   const btn = document.getElementById('login-btn');
   const diagApi = document.getElementById('diag-login-api');
 
   if (!username || !password) {
+    updateAuthDiagnostics('CREDENTIALS READ: MISSING VALUES');
     if (errorAlert) {
       errorAlert.innerText = 'Please enter both Username/Email and Password.';
       errorAlert.style.display = 'block';
@@ -2866,13 +2876,15 @@ async function handleLoginSubmit(e) {
     return;
   }
 
+  updateAuthDiagnostics('CREDENTIALS READ: ' + username);
+
   if (errorAlert) errorAlert.style.display = 'none';
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Signing In...';
   }
   if (diagApi) diagApi.innerText = 'FETCHING...';
-  updateAuthDiagnostics('LOGIN ATTEMPT SUBMITTED');
+  updateAuthDiagnostics('LOGIN API REQUEST SENT');
 
   try {
     const res = await fetch('/api/auth/login', {
@@ -2881,7 +2893,10 @@ async function handleLoginSubmit(e) {
       credentials: 'same-origin',
       body: JSON.stringify({ username, password })
     });
-    
+
+    if (diagApi) diagApi.innerText = 'RESPONSE (' + res.status + ')';
+    updateAuthDiagnostics('LOGIN API RESPONSE RECEIVED (HTTP ' + res.status + ')');
+
     let data;
     const rawText = await res.text();
     try {
@@ -2892,9 +2907,13 @@ async function handleLoginSubmit(e) {
 
     if (res.ok && data.status === 'success') {
       if (diagApi) diagApi.innerText = 'SUCCESS (200)';
+      updateAuthDiagnostics('LOGIN SUCCESS');
+      
       const user = data.user;
       if (user) {
         currentUser = user;
+        updateAuthDiagnostics('CURRENT USER SET: ' + user.full_name);
+
         const loginScreen = document.getElementById('login-screen');
         const appContainer = document.getElementById('app-container');
         if (loginScreen) loginScreen.style.display = 'none';
@@ -2923,7 +2942,7 @@ async function handleLoginSubmit(e) {
         try { loadExpenseCategories(); } catch(e) { console.error(e); }
         try { loadFranchisesList(); } catch(e) { console.error(e); }
 
-        updateAuthDiagnostics('LOGIN SUCCESS');
+        updateAuthDiagnostics('DASHBOARD SHOWN');
       } else {
         await checkAuthSession();
       }
@@ -2942,7 +2961,7 @@ async function handleLoginSubmit(e) {
       errorAlert.innerText = 'Network connection error. Please try again.';
       errorAlert.style.display = 'block';
     }
-    updateAuthDiagnostics('LOGIN EXCEPTION', err);
+    updateAuthDiagnostics('LOGIN EXCEPTION: ' + (err.message || err));
   } finally {
     if (btn) {
       btn.disabled = false;
