@@ -2753,12 +2753,14 @@ let currentUser = null;
 
 async function checkAuthSession() {
   try {
-    const res = await fetch('/api/auth/me');
+    const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
     const data = await res.json();
     if (data.authenticated && data.user) {
       currentUser = data.user;
-      document.getElementById('login-screen').style.display = 'none';
-      document.getElementById('app-container').style.display = 'flex';
+      const loginScreen = document.getElementById('login-screen');
+      const appContainer = document.getElementById('app-container');
+      if (loginScreen) loginScreen.style.display = 'none';
+      if (appContainer) appContainer.style.display = 'flex';
       
       const nameEl = document.getElementById('current-user-fullname');
       const roleEl = document.getElementById('current-role-badge');
@@ -2794,16 +2796,10 @@ async function checkAuthSession() {
 
 function showLoginScreen() {
   currentUser = null;
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('app-container').style.display = 'none';
-}
-
-function quickLogin(username, password) {
-  const uInput = document.getElementById('login-username');
-  const pInput = document.getElementById('login-password');
-  if (uInput) uInput.value = username;
-  if (pInput) pInput.value = password;
-  handleLoginSubmit();
+  const loginScreen = document.getElementById('login-screen');
+  const appContainer = document.getElementById('app-container');
+  if (loginScreen) loginScreen.style.display = 'flex';
+  if (appContainer) appContainer.style.display = 'none';
 }
 
 async function handleLoginSubmit(e) {
@@ -2831,6 +2827,7 @@ async function handleLoginSubmit(e) {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ username, password })
     });
     
@@ -2843,39 +2840,11 @@ async function handleLoginSubmit(e) {
     }
 
     if (res.ok && data.status === 'success') {
-      if (data.user) {
-        currentUser = data.user;
-        document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('app-container').style.display = 'flex';
-        
-        const nameEl = document.getElementById('current-user-fullname');
-        const roleEl = document.getElementById('current-role-badge');
-        if (nameEl) nameEl.innerText = currentUser.full_name;
-        if (roleEl) {
-          roleEl.innerText = currentUser.role;
-          if (currentUser.role === 'Super Admin') {
-            roleEl.style.background = '#FEF3C7';
-            roleEl.style.color = '#92400E';
-            roleEl.style.border = '1px solid #FCD34D';
-          } else {
-            roleEl.style.background = '#DBEAFE';
-            roleEl.style.color = '#1E40AF';
-            roleEl.style.border = '1px solid #93C5FD';
-          }
-        }
-
-        applyPermissionsToUI(currentUser);
-        restoreSidebarState();
-        initEventListeners();
-        loadDashboard();
-        loadExpenseCategories();
-        loadFranchisesList();
-      } else {
-        await checkAuthSession();
-      }
+      // Confirm authentication via /api/auth/me and navigate to dashboard
+      await checkAuthSession();
     } else {
       if (errorAlert) {
-        errorAlert.innerText = data.message || 'Invalid username or password.';
+        errorAlert.innerText = data.message || 'Invalid username/email or password.';
         errorAlert.style.display = 'block';
       }
     }
@@ -2895,7 +2864,7 @@ async function handleLoginSubmit(e) {
 
 async function handleLogout() {
   try {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
   } catch (err) {
     console.error('Logout error:', err);
   } finally {
