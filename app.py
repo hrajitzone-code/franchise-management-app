@@ -2898,9 +2898,10 @@ def auth_logout():
 def auth_me():
     user = get_current_user()
     if not user:
-        return jsonify({'authenticated': False}), 200
+        return jsonify({'authenticated': False, 'status': 'error'}), 200
     return jsonify({
         'authenticated': True,
+        'status': 'success',
         'user': user.to_dict()
     })
 

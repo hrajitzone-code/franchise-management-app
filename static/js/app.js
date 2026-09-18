@@ -320,6 +320,10 @@ function renderModulePage(pageId) {
 
   if (pageId === 'leads') {
     renderLeadsWorkspace(contentEl);
+  } else if (pageId === 'survey') {
+    renderSurveyWorkspace(contentEl);
+  } else if (pageId === 'agreement') {
+    renderAgreementWorkspace(contentEl);
   } else if (pageId === 'health') {
     renderHealthWorkspace(contentEl);
   } else if (pageId === 'expenses') {
@@ -1481,6 +1485,10 @@ function renderProfileTabContent(tab, data) {
     `;
   } else if (tab === 'visit_expenses') {
     renderVisitExpensesWorkspace(container);
+  } else if (tab === 'survey' || tab === 'site_visit') {
+    renderProfileSurveyTab(container, data);
+  } else if (tab === 'documents' || tab === 'agreements') {
+    renderProfileDocumentsTab(container, data);
   } else if (tab === 'timeline') {
     container.innerHTML = `
       <h3>Complete Chronological Activity Timeline</h3>
@@ -3432,7 +3440,7 @@ async function checkAuthSession() {
       return;
     }
     const data = await res.json();
-    if (data.authenticated && data.user) {
+    if ((data.authenticated || data.status === 'success') && data.user) {
       currentUser = data.user;
       const loginScreen = document.getElementById('login-screen');
       const appContainer = document.getElementById('app-container');
@@ -4202,5 +4210,972 @@ async function renderHealthWorkspace(containerEl) {
     containerEl.innerHTML = `<div style="padding: 20px; color: #DC2626;">Failed to load system health data.</div>`;
   }
 }
+
+// --- SURVEY, SITE VISIT & APPROVAL WORKFLOW MODULE ---
+
+let allSurveysList = [];
+let allAgreementsList = [];
+
+async function renderSurveyWorkspace(containerEl) {
+  containerEl.innerHTML = `
+    <!-- Top Stats / KPI Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #64748B; text-transform: uppercase;">Total Site Surveys</div>
+        <div id="survey-kpi-total" style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Version History Preserved</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #D97706; text-transform: uppercase;">Under Review</div>
+        <div id="survey-kpi-review" style="font-size: 1.5rem; font-weight: 800; color: #D97706; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Feasibility Assessment</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #059669; text-transform: uppercase;">Approved Sites</div>
+        <div id="survey-kpi-approved" style="font-size: 1.5rem; font-weight: 800; color: #059669; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Ready for Commercials</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #2563EB; text-transform: uppercase;">Average Rating Score</div>
+        <div id="survey-kpi-avg-score" style="font-size: 1.5rem; font-weight: 800; color: #2563EB; margin-top: 4px;">0.0 / 10</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Site Feasibility Index</div>
+      </div>
+    </div>
+
+    <!-- Filters & Actions -->
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 18px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 12px 16px; border-radius: 10px;">
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex: 1;">
+        <input type="text" id="survey-search-input" placeholder="Search Surveyor, Customer, Remarks..." onkeyup="filterSurveysList()" style="padding: 7px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.82rem; width: 250px;">
+        <select id="survey-status-filter" onchange="filterSurveysList()" style="padding: 7px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.82rem; font-weight: 600;">
+          <option value="ALL">All Workflow Statuses</option>
+          <option value="Under Review">Under Review</option>
+          <option value="Approved">Approved</option>
+          <option value="Pending Changes">Pending Changes</option>
+          <option value="Rejected">Rejected</option>
+          <option value="Agreement Signed">Agreement Signed</option>
+        </select>
+        <select id="survey-franchise-filter" onchange="filterSurveysList()" style="padding: 7px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.82rem;">
+          <option value="">All Franchises & Leads</option>
+        </select>
+      </div>
+      <button onclick="openSurveyModal()" style="background: #2563EB; color: #FFFFFF; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem; display: flex; align-items: center; gap: 6px;">
+        <i class="fa-solid fa-plus"></i> Upload Site Survey Report
+      </button>
+    </div>
+
+    <!-- Data Table -->
+    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <table class="custom-table" style="width: 100%;">
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Franchise / Lead</th>
+            <th>Surveyor & Date</th>
+            <th>Site Metrics (Area/Front/Footfall/Rent)</th>
+            <th>Rating Score</th>
+            <th>Workflow Status</th>
+            <th>PDF Report</th>
+            <th>Approval Info</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="survey-table-body">
+          <tr><td colspan="9" style="text-align: center; padding: 20px; color: #64748B;">Loading site surveys...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  await populateFranchiseAndLeadDropdown('survey-franchise-filter');
+  await loadSurveysData();
+}
+
+async function loadSurveysData() {
+  try {
+    const res = await fetch('/api/surveys');
+    allSurveysList = await res.json();
+
+    const totalCount = allSurveysList.length;
+    const reviewCount = allSurveysList.filter(s => s.status === 'Under Review' || !s.status).length;
+    const approvedCount = allSurveysList.filter(s => s.status === 'Approved' || s.status === 'Agreement Signed').length;
+    
+    let totalScore = 0;
+    allSurveysList.forEach(s => totalScore += (s.rating_score || 0));
+    const avgScore = totalCount > 0 ? (totalScore / totalCount).toFixed(1) : '0.0';
+
+    if (document.getElementById('survey-kpi-total')) {
+      document.getElementById('survey-kpi-total').innerText = totalCount;
+      document.getElementById('survey-kpi-review').innerText = reviewCount;
+      document.getElementById('survey-kpi-approved').innerText = approvedCount;
+      document.getElementById('survey-kpi-avg-score').innerText = `${avgScore} / 10`;
+    }
+
+    renderSurveysTableRows(allSurveysList);
+  } catch (err) {
+    console.error("Failed to load surveys data:", err);
+  }
+}
+
+function renderSurveysTableRows(surveys) {
+  const tbody = document.getElementById('survey-table-body');
+  if (!tbody) return;
+
+  if (!surveys || surveys.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 20px; color: #64748B;">No site survey records found. Click "+ Upload Site Survey Report" to add one.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = surveys.map(s => {
+    const targetName = s.franchise_name ? `<span style="color:#0F172A; font-weight:700;">${s.franchise_name}</span>` :
+                       s.lead_name ? `<span style="color:#2563EB; font-weight:600;">Lead: ${s.lead_name}</span>` :
+                       (s.customer_name || 'N/A');
+
+    const statusBg = s.status === 'Approved' ? 'background:#D1FAE5; color:#059669;' :
+                     s.status === 'Agreement Signed' ? 'background:#DBEAFE; color:#1D4ED8;' :
+                     s.status === 'Rejected' ? 'background:#FEE2E2; color:#DC2626;' :
+                     s.status === 'Pending Changes' ? 'background:#FFEDD5; color:#C2410C;' :
+                     'background:#FEF3C7; color:#D97706;';
+
+    return `
+      <tr>
+        <td><span class="records-badge" style="background:#EFF6FF; color:#2563EB; font-weight:700;">v${s.version_number}</span></td>
+        <td>${targetName}</td>
+        <td><b>${s.surveyor_name || 'Inspector'}</b><br><span style="font-size:0.75rem; color:#64748B;">${s.survey_date || ''}</span></td>
+        <td>
+          <div style="font-size:0.8rem;">
+            <b>${s.area_sqft || 0}</b> sqft • <b>${s.frontage_ft || 0}</b>ft front<br>
+            <span style="color:#64748B;">Footfall: <b>${s.daily_footfall || 0}</b>/day • Rent: <b>Rs. ${(s.monthly_rent||0).toLocaleString('en-IN')}</b></span>
+          </div>
+        </td>
+        <td><b style="color: #D97706;"><i class="fa-solid fa-star"></i> ${(s.rating_score || 0).toFixed(1)} / 10</b></td>
+        <td><span class="records-badge" style="${statusBg}">${s.status || 'Under Review'}</span></td>
+        <td>
+          ${s.pdf_filepath ? `
+            <button onclick="previewPDF('${s.pdf_filepath}')" style="background:#EFF6FF; color:#2563EB; border:1px solid #BFDBFE; padding:3px 8px; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+              <i class="fa-solid fa-file-pdf"></i> Preview
+            </button>
+          ` : '<span style="color:#94A3B8; font-size:0.78rem;">No PDF</span>'}
+        </td>
+        <td>
+          ${s.approved_by ? `<div style="font-size:0.78rem;"><b>${s.approved_by}</b><br><span style="color:#64748B;">${s.approval_date || ''}</span></div>` : '<span style="color:#94A3B8; font-size:0.78rem;">-</span>'}
+        </td>
+        <td>
+          <div style="display:flex; gap:4px; align-items:center;">
+            <button onclick="openExtractedJsonModalBySurveyId(${s.id})" style="background:#F1F5F9; color:#334155; border:1px solid #CBD5E1; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;" title="Review & Edit Extracted Info">
+              <i class="fa-solid fa-sliders"></i> Edit
+            </button>
+            <button onclick="openApprovalModalBySurveyId(${s.id})" style="background:#ECFDF5; color:#047857; border:1px solid #A7F3D0; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;" title="Workflow Status Change">
+              <i class="fa-solid fa-check-to-slot"></i> Status
+            </button>
+            <button onclick="deleteSurveyVersion(${s.id})" style="background:#FEF2F2; color:#DC2626; border:1px solid #FCA5A5; padding:3px 6px; border-radius:6px; font-size:0.75rem; cursor:pointer;" title="Delete Version">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterSurveysList() {
+  const searchQ = (document.getElementById('survey-search-input')?.value || '').toLowerCase();
+  const statusF = document.getElementById('survey-status-filter')?.value || 'ALL';
+  const fFilter = document.getElementById('survey-franchise-filter')?.value || '';
+
+  const filtered = allSurveysList.filter(s => {
+    const matchesSearch = !searchQ ||
+      (s.surveyor_name || '').toLowerCase().includes(searchQ) ||
+      (s.customer_name || '').toLowerCase().includes(searchQ) ||
+      (s.franchise_name || '').toLowerCase().includes(searchQ) ||
+      (s.lead_name || '').toLowerCase().includes(searchQ) ||
+      (s.remarks || '').toLowerCase().includes(searchQ);
+
+    const matchesStatus = statusF === 'ALL' || s.status === statusF;
+
+    let matchesFranchise = true;
+    if (fFilter) {
+      if (fFilter.startsWith('f_')) {
+        matchesFranchise = s.franchise_id === parseInt(fFilter.replace('f_', ''));
+      } else if (fFilter.startsWith('l_')) {
+        matchesFranchise = s.lead_id === parseInt(fFilter.replace('l_', ''));
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesFranchise;
+  });
+
+  renderSurveysTableRows(filtered);
+}
+
+// --- APPROVAL & COMMERCIAL AGREEMENTS WORKSPACE ---
+
+async function renderAgreementWorkspace(containerEl) {
+  containerEl.innerHTML = `
+    <!-- Top Stats / KPI Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #64748B; text-transform: uppercase;">Commercial Agreements</div>
+        <div id="agreement-kpi-total" style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Legal & Franchising Contracts</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #059669; text-transform: uppercase;">Approved Site Feasibilities</div>
+        <div id="agreement-kpi-approved-surveys" style="font-size: 1.5rem; font-weight: 800; color: #059669; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Passed Inspection</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #2563EB; text-transform: uppercase;">Agreements Signed</div>
+        <div id="agreement-kpi-signed" style="font-size: 1.5rem; font-weight: 800; color: #2563EB; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Fully Executed Docs</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #D97706; text-transform: uppercase;">Under Legal Review</div>
+        <div id="agreement-kpi-pending" style="font-size: 1.5rem; font-weight: 800; color: #D97706; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Awaiting Execution</div>
+      </div>
+    </div>
+
+    <!-- Filters & Upload Action -->
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 18px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 12px 16px; border-radius: 10px;">
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex: 1;">
+        <input type="text" id="agreement-search-input" placeholder="Search Franchise, Lead or Evaluator..." onkeyup="filterAgreementsList()" style="padding: 7px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.82rem; width: 260px;">
+        <select id="agreement-status-filter" onchange="filterAgreementsList()" style="padding: 7px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.82rem; font-weight: 600;">
+          <option value="ALL">All Agreement Stages</option>
+          <option value="Approved">Approved Site</option>
+          <option value="Agreement Signed">Agreement Signed</option>
+          <option value="Under Review">Under Review</option>
+          <option value="Pending Changes">Pending Changes</option>
+        </select>
+      </div>
+      <button onclick="openUploadDocumentModal('Agreement')" style="background: #059669; color: #FFFFFF; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem; display: flex; align-items: center; gap: 6px;">
+        <i class="fa-solid fa-file-signature"></i> Upload Signed Agreement Doc
+      </button>
+    </div>
+
+    <!-- Master Table -->
+    <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <table class="custom-table" style="width: 100%;">
+        <thead>
+          <tr>
+            <th>Franchise / Lead Target</th>
+            <th>Latest Feasibility Score</th>
+            <th>Agreement Stage</th>
+            <th>Approved By</th>
+            <th>Approval Date</th>
+            <th>Survey PDF</th>
+            <th>Signed Contract Doc</th>
+            <th>Workflow Actions</th>
+          </tr>
+        </thead>
+        <tbody id="agreement-table-body">
+          <tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748B;">Loading commercial agreements...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  await loadAgreementsData();
+}
+
+async function loadAgreementsData() {
+  try {
+    const [surveysRes, docsRes] = await Promise.all([
+      fetch('/api/surveys'),
+      fetch('/api/documents?stage_name=Agreement')
+    ]);
+
+    const surveys = await surveysRes.json();
+    const agreementDocs = await docsRes.json();
+
+    allAgreementsList = surveys;
+
+    const totalAgreements = surveys.length;
+    const approvedSurveys = surveys.filter(s => s.status === 'Approved' || s.status === 'Agreement Signed').length;
+    const signedCount = surveys.filter(s => s.status === 'Agreement Signed').length;
+    const pendingCount = surveys.filter(s => s.status === 'Under Review' || s.status === 'Pending Changes').length;
+
+    if (document.getElementById('agreement-kpi-total')) {
+      document.getElementById('agreement-kpi-total').innerText = totalAgreements;
+      document.getElementById('agreement-kpi-approved-surveys').innerText = approvedSurveys;
+      document.getElementById('agreement-kpi-signed').innerText = signedCount;
+      document.getElementById('agreement-kpi-pending').innerText = pendingCount;
+    }
+
+    renderAgreementsTableRows(surveys, agreementDocs);
+  } catch (err) {
+    console.error("Failed to load agreements data:", err);
+  }
+}
+
+function renderAgreementsTableRows(surveys, agreementDocs = []) {
+  const tbody = document.getElementById('agreement-table-body');
+  if (!tbody) return;
+
+  if (!surveys || surveys.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 20px; color: #64748B;">No commercial agreement workflow records. Upload a site survey report first.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = surveys.map(s => {
+    const targetName = s.franchise_name ? `<span style="color:#0F172A; font-weight:700;">${s.franchise_name}</span>` :
+                       s.lead_name ? `<span style="color:#2563EB; font-weight:600;">Lead: ${s.lead_name}</span>` :
+                       (s.customer_name || 'N/A');
+
+    const linkedDoc = agreementDocs.find(d => (s.franchise_id && d.franchise_id === s.franchise_id) || (s.lead_id && d.lead_id === s.lead_id));
+
+    const statusBg = s.status === 'Agreement Signed' ? 'background:#DBEAFE; color:#1D4ED8;' :
+                     s.status === 'Approved' ? 'background:#D1FAE5; color:#059669;' :
+                     s.status === 'Rejected' ? 'background:#FEE2E2; color:#DC2626;' :
+                     'background:#FEF3C7; color:#D97706;';
+
+    return `
+      <tr>
+        <td>${targetName}</td>
+        <td>
+          <b style="color: #D97706;"><i class="fa-solid fa-star"></i> ${(s.rating_score || 0).toFixed(1)} / 10</b>
+          <br><span style="font-size:0.75rem; color:#64748B;">${s.area_sqft || 0} sqft • v${s.version_number}</span>
+        </td>
+        <td><span class="records-badge" style="${statusBg}">${s.status || 'Under Review'}</span></td>
+        <td><b>${s.approved_by || '-'}</b></td>
+        <td><span style="font-size:0.8rem; color:#64748B;">${s.approval_date || '-'}</span></td>
+        <td>
+          ${s.pdf_filepath ? `
+            <button onclick="previewPDF('${s.pdf_filepath}')" style="background:#EFF6FF; color:#2563EB; border:1px solid #BFDBFE; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;">
+              <i class="fa-solid fa-file-pdf"></i> Site Report
+            </button>
+          ` : '-'}
+        </td>
+        <td>
+          ${linkedDoc ? `
+            <button onclick="previewPDF('${linkedDoc.file_path}')" style="background:#ECFDF5; color:#047857; border:1px solid #A7F3D0; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;">
+              <i class="fa-solid fa-file-contract"></i> Signed Contract
+            </button>
+          ` : `
+            <button onclick="openUploadDocumentModal('Agreement', ${s.franchise_id || 'null'}, ${s.lead_id || 'null'})" style="background:#F8FAFC; color:#64748B; border:1px dashed #CBD5E1; padding:3px 8px; border-radius:6px; font-size:0.75rem; cursor:pointer;">
+              + Upload Doc
+            </button>
+          `}
+        </td>
+        <td>
+          <div style="display:flex; gap:4px; align-items:center;">
+            <button onclick="openApprovalModalBySurveyId(${s.id})" style="background:#2563EB; color:#FFFFFF; border:none; padding:4px 10px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;">
+              <i class="fa-solid fa-check-to-slot"></i> Change Stage
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterAgreementsList() {
+  const searchQ = (document.getElementById('agreement-search-input')?.value || '').toLowerCase();
+  const statusF = document.getElementById('agreement-status-filter')?.value || 'ALL';
+
+  const filtered = allAgreementsList.filter(s => {
+    const matchesSearch = !searchQ ||
+      (s.customer_name || '').toLowerCase().includes(searchQ) ||
+      (s.franchise_name || '').toLowerCase().includes(searchQ) ||
+      (s.lead_name || '').toLowerCase().includes(searchQ) ||
+      (s.approved_by || '').toLowerCase().includes(searchQ);
+
+    const matchesStatus = statusF === 'ALL' || s.status === statusF;
+    return matchesSearch && matchesStatus;
+  });
+
+  renderAgreementsTableRows(filtered);
+}
+
+// --- MODALS FOR SURVEY & APPROVAL WORKFLOW ---
+
+async function openSurveyModal(targetFranchiseId = null, targetLeadId = null) {
+  document.getElementById('modal-title').innerText = 'Upload Site Survey & Location Feasibility Report';
+  
+  const [fRes, lRes] = await Promise.all([
+    fetch('/api/franchises'),
+    fetch('/api/leads')
+  ]);
+  const franchises = await fRes.json();
+  const leads = await lRes.json();
+
+  let targetOptions = `<option value="">Select Target Franchise or Inquiry Lead...</option>`;
+  targetOptions += `<optgroup label="Active / Existing Franchises">`;
+  franchises.forEach(f => {
+    const sel = targetFranchiseId && f.id === targetFranchiseId ? 'selected' : '';
+    targetOptions += `<option value="f_${f.id}" ${sel}>Franchise: ${f.name} (${f.owner_name})</option>`;
+  });
+  targetOptions += `</optgroup><optgroup label="Pre-Franchise Inquiries / Leads">`;
+  leads.forEach(l => {
+    const sel = targetLeadId && l.id === targetLeadId ? 'selected' : '';
+    targetOptions += `<option value="l_${l.id}" ${sel}>Lead: ${l.customer_name} (${l.city || 'City N/A'})</option>`;
+  });
+  targetOptions += `</optgroup>`;
+
+  document.getElementById('modal-body').innerHTML = `
+    <form onsubmit="submitSurveyForm(event)" style="display: flex; flex-direction: column; gap: 14px;">
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Link to Franchise or Inquiry Lead *</label>
+        <select id="survey-modal-target" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+          ${targetOptions}
+        </select>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Surveyor / Inspector Name *</label>
+          <input type="text" id="survey-modal-surveyor" required placeholder="e.g. Rajesh Kumar" value="Rajesh Kumar" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Survey Date *</label>
+          <input type="date" id="survey-modal-date" required value="${new Date().toISOString().split('T')[0]}" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Attach Site Survey PDF Report Document</label>
+        <input type="file" id="survey-modal-pdf" accept=".pdf,.png,.jpg,.jpeg" style="width:100%; padding:6px; font-size:0.82rem; border:1px solid #CBD5E1; border-radius:6px; background:#F8FAFC;">
+        <span style="font-size:0.75rem; color:#64748B;">Upload original PDF site audit report for inline document preview.</span>
+      </div>
+
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
+        <div style="font-size:0.82rem; font-weight:700; color:#0F172A; margin-bottom:8px;"><i class="fa-solid fa-ruler-combined" style="color:#2563EB;"></i> Key Extracted Site Metrics</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div>
+            <label style="font-size:0.78rem; font-weight:600;">Area (sq ft)</label>
+            <input type="number" step="any" id="survey-modal-area" placeholder="1000" value="1200" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+          <div>
+            <label style="font-size:0.78rem; font-weight:600;">Frontage (ft)</label>
+            <input type="number" step="any" id="survey-modal-frontage" placeholder="25" value="30" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+          <div>
+            <label style="font-size:0.78rem; font-weight:600;">Daily Footfall</label>
+            <input type="number" id="survey-modal-footfall" placeholder="500" value="850" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top:10px;">
+          <div>
+            <label style="font-size:0.78rem; font-weight:600;">Estimated Monthly Rent (Rs.)</label>
+            <input type="number" step="any" id="survey-modal-rent" placeholder="45000" value="50000" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+          <div>
+            <label style="font-size:0.78rem; font-weight:600;">Feasibility Score (0.0 to 10.0)</label>
+            <input type="number" step="0.1" min="0" max="10" id="survey-modal-score" placeholder="8.5" value="8.5" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem; font-weight:700; color:#D97706;">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Remarks & Field Inspection Summary</label>
+        <textarea id="survey-modal-remarks" rows="2" placeholder="Site located on main high street near metro station..." style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;"></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" onclick="closeModal()" style="padding: 8px 16px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 20px; border-radius: 6px; border: none; background: #2563EB; color: #FFFFFF; cursor: pointer; font-weight: 600;">Save & Upload Survey Report</button>
+      </div>
+    </form>
+  `;
+
+  document.getElementById('custom-modal').style.display = 'flex';
+}
+
+async function submitSurveyForm(e) {
+  e.preventDefault();
+  const targetVal = document.getElementById('survey-modal-target').value;
+  if (!targetVal) {
+    alert("Please select a Target Franchise or Inquiry Lead!");
+    return;
+  }
+
+  const formData = new FormData();
+  if (targetVal.startsWith('f_')) {
+    formData.append('franchise_id', targetVal.replace('f_', ''));
+  } else if (targetVal.startsWith('l_')) {
+    formData.append('lead_id', targetVal.replace('l_', ''));
+  }
+
+  formData.append('surveyor_name', document.getElementById('survey-modal-surveyor').value);
+  formData.append('survey_date', document.getElementById('survey-modal-date').value);
+  formData.append('area_sqft', document.getElementById('survey-modal-area').value);
+  formData.append('frontage_ft', document.getElementById('survey-modal-frontage').value);
+  formData.append('daily_footfall', document.getElementById('survey-modal-footfall').value);
+  formData.append('monthly_rent', document.getElementById('survey-modal-rent').value);
+  formData.append('rating_score', document.getElementById('survey-modal-score').value);
+  formData.append('remarks', document.getElementById('survey-modal-remarks').value);
+
+  const pdfInput = document.getElementById('survey-modal-pdf');
+  if (pdfInput && pdfInput.files.length > 0) {
+    formData.append('pdf_file', pdfInput.files[0]);
+  }
+
+  try {
+    const res = await fetch('/api/surveys', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      closeModal();
+      if (activePage === 'survey') renderSurveyWorkspace(document.getElementById('module-page-content'));
+      else if (activePage === 'agreement') renderAgreementWorkspace(document.getElementById('module-page-content'));
+      else if (activeFranchiseId) loadFranchiseProfileData(activeFranchiseId);
+    } else {
+      alert(`Error saving survey: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert("Failed to save site survey report.");
+  }
+}
+
+function openExtractedJsonModalBySurveyId(sId) {
+  const survey = allSurveysList.find(s => s.id === sId);
+  if (!survey) return;
+
+  document.getElementById('modal-title').innerText = `Review & Edit Extracted Information (Version v${survey.version_number})`;
+  
+  let extractedObj = {};
+  if (survey.extracted_json) {
+    try {
+      extractedObj = typeof survey.extracted_json === 'string' ? JSON.parse(survey.extracted_json) : survey.extracted_json;
+    } catch (e) {}
+  }
+
+  document.getElementById('modal-body').innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="background:#EFF6FF; border:1px solid #BFDBFE; padding:10px 14px; border-radius:8px; font-size:0.82rem; color:#1E40AF;">
+        <i class="fa-solid fa-code-branch"></i> <b>Version History Preservation Engine:</b> Choose <b>"Save as New Version (v${survey.version_number + 1})"</b> to record new site edits while maintaining full historical audit logs of previous survey versions.
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size:0.8rem; font-weight:600;">Surveyor Name</label>
+          <input type="text" id="edit-surveyor" value="${survey.surveyor_name || ''}" style="width:100%; padding:8px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; font-weight:600;">Survey Date</label>
+          <input type="date" id="edit-date" value="${survey.survey_date || ''}" style="width:100%; padding:8px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+        <div>
+          <label style="font-size:0.78rem; font-weight:600;">Area (sq ft)</label>
+          <input type="number" step="any" id="edit-area" value="${survey.area_sqft || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; font-weight:600;">Frontage (ft)</label>
+          <input type="number" step="any" id="edit-frontage" value="${survey.frontage_ft || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; font-weight:600;">Daily Footfall</label>
+          <input type="number" id="edit-footfall" value="${survey.daily_footfall || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div>
+          <label style="font-size:0.78rem; font-weight:600;">Monthly Rent (Rs.)</label>
+          <input type="number" step="any" id="edit-rent" value="${survey.monthly_rent || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; font-weight:600;">Rating Score (0 to 10)</label>
+          <input type="number" step="0.1" id="edit-score" value="${survey.rating_score || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem; font-weight:700; color:#D97706;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600;">Extracted Payload (JSON Format Inspection)</label>
+        <textarea id="edit-json-str" rows="3" style="width:100%; font-family:monospace; font-size:0.78rem; padding:8px; border-radius:6px; border:1px solid #CBD5E1; background:#F8FAFC;">${JSON.stringify(extractedObj, null, 2)}</textarea>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600;">Remarks / Review Notes</label>
+        <textarea id="edit-remarks" rows="2" style="width:100%; padding:8px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">${survey.remarks || ''}</textarea>
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; border-top: 1px solid #E2E8F0; padding-top: 12px;">
+        <button type="button" onclick="closeModal()" style="padding: 8px 14px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <div style="display: flex; gap: 8px;">
+          <button type="button" onclick="submitExtractedJsonForm(${survey.id}, false)" style="padding: 8px 14px; border-radius: 6px; border: 1px solid #2563EB; background: #EFF6FF; color: #2563EB; cursor: pointer; font-weight: 600;">Update In-Place (v${survey.version_number})</button>
+          <button type="button" onclick="submitExtractedJsonForm(${survey.id}, true)" style="padding: 8px 16px; border-radius: 6px; border: none; background: #059669; color: #FFFFFF; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-code-fork"></i> Save as New Version (v${survey.version_number + 1})
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('custom-modal').style.display = 'flex';
+}
+
+async function submitExtractedJsonForm(sId, saveAsNewVersion) {
+  let jsonStr = document.getElementById('edit-json-str').value;
+  try {
+    JSON.parse(jsonStr);
+  } catch (e) {
+    alert("Invalid JSON format in Extracted Payload textarea.");
+    return;
+  }
+
+  const payload = {
+    surveyor_name: document.getElementById('edit-surveyor').value,
+    survey_date: document.getElementById('edit-date').value,
+    area_sqft: document.getElementById('edit-area').value,
+    frontage_ft: document.getElementById('edit-frontage').value,
+    daily_footfall: document.getElementById('edit-footfall').value,
+    monthly_rent: document.getElementById('edit-rent').value,
+    rating_score: document.getElementById('edit-score').value,
+    extracted_json: jsonStr,
+    remarks: document.getElementById('edit-remarks').value,
+    save_as_new_version: saveAsNewVersion
+  };
+
+  try {
+    const res = await fetch(`/api/surveys/${sId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      closeModal();
+      if (activePage === 'survey') renderSurveyWorkspace(document.getElementById('module-page-content'));
+      else if (activePage === 'agreement') renderAgreementWorkspace(document.getElementById('module-page-content'));
+      else if (activeFranchiseId) loadFranchiseProfileData(activeFranchiseId);
+    } else {
+      alert(`Update failed: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert("Failed to update site survey.");
+  }
+}
+
+function openApprovalModalBySurveyId(sId) {
+  const survey = allSurveysList.find(s => s.id === sId);
+  if (!survey) return;
+
+  document.getElementById('modal-title').innerText = `Workflow & Approval Status Tracker (v${survey.version_number})`;
+
+  document.getElementById('modal-body').innerHTML = `
+    <form onsubmit="submitApprovalForm(event, ${survey.id})" style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
+        <div style="font-size:0.85rem; font-weight:700; color:#0F172A;">
+          Target: ${survey.franchise_name || survey.lead_name || survey.customer_name || 'N/A'}
+        </div>
+        <div style="font-size:0.78rem; color:#64748B; margin-top:4px;">
+          Version: <b>v${survey.version_number}</b> • Rating: <b>${survey.rating_score}/10</b> • Area: <b>${survey.area_sqft} sqft</b>
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">New Approval Status *</label>
+        <select id="approval-status-select" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem; font-weight:700;">
+          <option value="Under Review" ${survey.status === 'Under Review' ? 'selected' : ''}>Under Review (Feasibility Evaluation)</option>
+          <option value="Approved" ${survey.status === 'Approved' ? 'selected' : ''}>Approved (Site Accepted)</option>
+          <option value="Pending Changes" ${survey.status === 'Pending Changes' ? 'selected' : ''}>Pending Changes (Re-survey Required)</option>
+          <option value="Rejected" ${survey.status === 'Rejected' ? 'selected' : ''}>Rejected (Site Rejected)</option>
+          <option value="Agreement Signed" ${survey.status === 'Agreement Signed' ? 'selected' : ''}>Agreement Signed (Contract Executed)</option>
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Evaluator / Approver Name *</label>
+        <input type="text" id="approval-by-input" required value="${survey.approved_by || 'Admin / Management'}" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Approval / Review Remarks</label>
+        <textarea id="approval-remarks-input" rows="3" placeholder="Provide reason or conditional approval terms..." style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;"></textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" onclick="closeModal()" style="padding: 8px 16px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 20px; border-radius: 6px; border: none; background: #059669; color: #FFFFFF; cursor: pointer; font-weight: 600;">Update Status & Log Audit</button>
+      </div>
+    </form>
+  `;
+
+  document.getElementById('custom-modal').style.display = 'flex';
+}
+
+async function submitApprovalForm(e, sId) {
+  e.preventDefault();
+  const payload = {
+    status: document.getElementById('approval-status-select').value,
+    approved_by: document.getElementById('approval-by-input').value,
+    remarks: document.getElementById('approval-remarks-input').value
+  };
+
+  try {
+    const res = await fetch(`/api/surveys/${sId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      closeModal();
+      if (activePage === 'survey') renderSurveyWorkspace(document.getElementById('module-page-content'));
+      else if (activePage === 'agreement') renderAgreementWorkspace(document.getElementById('module-page-content'));
+      else if (activeFranchiseId) loadFranchiseProfileData(activeFranchiseId);
+    } else {
+      alert(`Failed to update approval status: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert("Server error during approval workflow update.");
+  }
+}
+
+async function openUploadDocumentModal(stageName = 'Agreement', targetFranchiseId = null, targetLeadId = null) {
+  document.getElementById('modal-title').innerText = `Upload ${stageName} Document`;
+
+  const [fRes, lRes] = await Promise.all([
+    fetch('/api/franchises'),
+    fetch('/api/leads')
+  ]);
+  const franchises = await fRes.json();
+  const leads = await lRes.json();
+
+  let targetOptions = `<option value="">Select Target Franchise or Inquiry Lead...</option>`;
+  targetOptions += `<optgroup label="Active / Existing Franchises">`;
+  franchises.forEach(f => {
+    const sel = targetFranchiseId && f.id === targetFranchiseId ? 'selected' : '';
+    targetOptions += `<option value="f_${f.id}" ${sel}>Franchise: ${f.name} (${f.owner_name})</option>`;
+  });
+  targetOptions += `</optgroup><optgroup label="Pre-Franchise Inquiries / Leads">`;
+  leads.forEach(l => {
+    const sel = targetLeadId && l.id === targetLeadId ? 'selected' : '';
+    targetOptions += `<option value="l_${l.id}" ${sel}>Lead: ${l.customer_name}</option>`;
+  });
+  targetOptions += `</optgroup>`;
+
+  document.getElementById('modal-body').innerHTML = `
+    <form onsubmit="submitDocumentUploadForm(event)" style="display: flex; flex-direction: column; gap: 14px;">
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Link to Franchise or Lead *</label>
+        <select id="doc-modal-target" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+          ${targetOptions}
+        </select>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Workflow Stage *</label>
+          <input type="text" id="doc-modal-stage" required value="${stageName}" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Document Type</label>
+          <select id="doc-modal-type" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+            <option value="PDF">PDF Agreement Document</option>
+            <option value="Signed Contract">Signed Franchise Contract</option>
+            <option value="KYC / Identity">KYC / Identity Document</option>
+            <option value="Site Survey">Site Inspection Report</option>
+            <option value="Financial">Payment / Financial Slip</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Document Title / Description *</label>
+        <input type="text" id="doc-modal-title" required placeholder="e.g. Executed Commercial Franchise Agreement 2026" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Select File *</label>
+        <input type="file" id="doc-modal-file" required accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem; background:#F8FAFC;">
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Uploaded By</label>
+        <input type="text" id="doc-modal-by" value="Legal Dept / Admin" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" onclick="closeModal()" style="padding: 8px 16px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 20px; border-radius: 6px; border: none; background: #059669; color: #FFFFFF; cursor: pointer; font-weight: 600;">Upload & Link Document</button>
+      </div>
+    </form>
+  `;
+
+  document.getElementById('custom-modal').style.display = 'flex';
+}
+
+async function submitDocumentUploadForm(e) {
+  e.preventDefault();
+  const targetVal = document.getElementById('doc-modal-target').value;
+  if (!targetVal) {
+    alert("Please select a target franchise or lead.");
+    return;
+  }
+
+  const formData = new FormData();
+  if (targetVal.startsWith('f_')) formData.append('franchise_id', targetVal.replace('f_', ''));
+  else if (targetVal.startsWith('l_')) formData.append('lead_id', targetVal.replace('l_', ''));
+
+  formData.append('stage_name', document.getElementById('doc-modal-stage').value);
+  formData.append('doc_type', document.getElementById('doc-modal-type').value);
+  formData.append('doc_title', document.getElementById('doc-modal-title').value);
+  formData.append('uploaded_by', document.getElementById('doc-modal-by').value);
+
+  const fileInput = document.getElementById('doc-modal-file');
+  if (fileInput && fileInput.files.length > 0) {
+    formData.append('file', fileInput.files[0]);
+  }
+
+  try {
+    const res = await fetch('/api/documents', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      closeModal();
+      if (activePage === 'agreement') renderAgreementWorkspace(document.getElementById('module-page-content'));
+      else if (activeFranchiseId) loadFranchiseProfileData(activeFranchiseId);
+    } else {
+      alert(`Upload failed: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert("Failed to upload document file.");
+  }
+}
+
+async function deleteSurveyVersion(sId) {
+  if (!confirm("Are you sure you want to delete this survey version record?")) return;
+  try {
+    const res = await fetch(`/api/surveys/${sId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.status === 'success') {
+      if (activePage === 'survey') renderSurveyWorkspace(document.getElementById('module-page-content'));
+      else if (activePage === 'agreement') renderAgreementWorkspace(document.getElementById('module-page-content'));
+      else if (activeFranchiseId) loadFranchiseProfileData(activeFranchiseId);
+    }
+  } catch (err) {
+    alert("Failed to delete survey record.");
+  }
+}
+
+async function populateFranchiseAndLeadDropdown(selectId) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+
+  try {
+    const [fRes, lRes] = await Promise.all([
+      fetch('/api/franchises'),
+      fetch('/api/leads')
+    ]);
+    const franchises = await fRes.json();
+    const leads = await lRes.json();
+
+    let html = `<option value="">All Franchises & Leads</option>`;
+    html += `<optgroup label="Franchises">`;
+    franchises.forEach(f => {
+      html += `<option value="f_${f.id}">${f.name}</option>`;
+    });
+    html += `</optgroup><optgroup label="Inquiry Leads">`;
+    leads.forEach(l => {
+      html += `<option value="l_${l.id}">Lead: ${l.customer_name}</option>`;
+    });
+    html += `</optgroup>`;
+    sel.innerHTML = html;
+  } catch (e) {}
+}
+
+function renderProfileSurveyTab(container, data) {
+  const f = data.franchise;
+  const surveyList = data.surveys || [];
+  container.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <h3>Site Survey & Location Feasibility Reports (Version History Log)</h3>
+      <button class="btn-ref-explore" onclick="openSurveyModal(${f.id})" style="width: auto; padding: 6px 14px;">
+        <i class="fa-solid fa-plus"></i> Upload New Survey Version
+      </button>
+    </div>
+    <table class="custom-table">
+      <thead>
+        <tr>
+          <th>Version</th>
+          <th>Surveyor & Date</th>
+          <th>Metrics (Area/Frontage/Footfall/Rent)</th>
+          <th>Rating Score</th>
+          <th>Workflow Status</th>
+          <th>Approval Info</th>
+          <th>PDF Report</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${surveyList.length ? surveyList.map(s => `
+          <tr>
+            <td><span class="records-badge" style="background:#EFF6FF; color:#2563EB; font-weight:700;">v${s.version_number}</span></td>
+            <td><b>${s.surveyor_name || 'Inspector'}</b><br><span style="font-size:0.75rem; color:#64748B;">${s.survey_date || ''}</span></td>
+            <td>${s.area_sqft} sqft • ${s.frontage_ft}ft front • ${s.daily_footfall}/day • Rs. ${(s.monthly_rent||0).toLocaleString('en-IN')}/mo</td>
+            <td><b style="color: #D97706;"><i class="fa-solid fa-star"></i> ${(s.rating_score||0).toFixed(1)} / 10</b></td>
+            <td>
+              <span class="records-badge" style="${
+                s.status === 'Approved' ? 'background:#D1FAE5; color:#059669;' :
+                s.status === 'Agreement Signed' ? 'background:#DBEAFE; color:#1D4ED8;' :
+                s.status === 'Rejected' ? 'background:#FEE2E2; color:#DC2626;' :
+                s.status === 'Pending Changes' ? 'background:#FFEDD5; color:#C2410C;' :
+                'background:#FEF3C7; color:#D97706;'
+              }">${s.status || 'Under Review'}</span>
+            </td>
+            <td>${s.approved_by ? `${s.approved_by}<br><span style="font-size:0.75rem; color:#64748B;">${s.approval_date || ''}</span>` : '-'}</td>
+            <td>
+              ${s.pdf_filepath ? `
+                <button onclick="previewPDF('${s.pdf_filepath}')" style="background:#EFF6FF; color:#2563EB; border:1px solid #BFDBFE; padding:3px 8px; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer;">
+                  <i class="fa-solid fa-file-pdf"></i> View PDF
+                </button>
+              ` : '-'}
+            </td>
+            <td>
+              <div style="display:flex; gap:4px;">
+                <button onclick="openExtractedJsonModalBySurveyId(${s.id})" style="background:#F1F5F9; color:#334155; border:1px solid #CBD5E1; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;">Edit</button>
+                <button onclick="openApprovalModalBySurveyId(${s.id})" style="background:#ECFDF5; color:#047857; border:1px solid #A7F3D0; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;">Status</button>
+              </div>
+            </td>
+          </tr>
+        `).join('') : '<tr><td colspan="8" style="text-align: center;">No site survey records found for this franchise profile.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderProfileDocumentsTab(container, data) {
+  const f = data.franchise;
+  const docList = data.documents || [];
+  container.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <h3>Franchise Document Repository & Agreement Filings</h3>
+      <button class="btn-ref-explore" onclick="openUploadDocumentModal('General', ${f.id})" style="width: auto; padding: 6px 14px;">
+        <i class="fa-solid fa-cloud-arrow-up"></i> Upload Document
+      </button>
+    </div>
+    <table class="custom-table">
+      <thead>
+        <tr><th>Stage</th><th>Document Title</th><th>Doc Type</th><th>File Name</th><th>Uploaded By</th><th>Upload Date</th><th>Preview</th></tr>
+      </thead>
+      <tbody>
+        ${docList.length ? docList.map(d => `
+          <tr>
+            <td><span class="records-badge">${d.stage_name || 'General'}</span></td>
+            <td><b>${d.doc_title}</b></td>
+            <td>${d.doc_type || 'PDF'}</td>
+            <td>${d.file_name}</td>
+            <td>${d.uploaded_by || 'Staff'}</td>
+            <td>${d.uploaded_at || ''}</td>
+            <td>
+              <button onclick="previewPDF('${d.file_path}')" style="background:#EFF6FF; color:#2563EB; border:1px solid #BFDBFE; padding:3px 8px; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer;">
+                <i class="fa-solid fa-eye"></i> View File
+              </button>
+            </td>
+          </tr>
+        `).join('') : '<tr><td colspan="7" style="text-align: center;">No documents uploaded for this franchise.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+}
+
 
 
