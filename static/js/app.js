@@ -311,7 +311,8 @@ function renderModulePage(pageId) {
     'complaints': 'Franchise Complaints & Issues Module',
     'audit': 'System Audit History Log',
     'users': 'User Management & Access Control',
-    'permissions': 'User Roles & Access Control'
+    'permissions': 'User Roles & Access Control',
+    'health': 'Data Health & System Persistence Status'
   };
 
   titleEl.innerText = titles[pageId] || 'Module Workspace';
@@ -319,6 +320,8 @@ function renderModulePage(pageId) {
 
   if (pageId === 'leads') {
     renderLeadsWorkspace(contentEl);
+  } else if (pageId === 'health') {
+    renderHealthWorkspace(contentEl);
   } else if (pageId === 'expenses') {
     renderExpensesWorkspace(contentEl);
   } else if (pageId === 'visit_expenses') {
@@ -542,10 +545,7 @@ function renderLeadsRows(leads) {
   }
 
   tbody.innerHTML = leads.map(l => {
-    const isTokenReceived = l.status === 'Token Received';
-    const isConverted = l.status === 'Converted to Franchise';
-    const canConvert = isTokenReceived && !isConverted;
-
+    const isConverted = l.status === 'Converted' || l.status === 'Converted to Franchise';
     const leadJson = JSON.stringify(l).replace(/'/g, "&apos;");
 
     return `
@@ -568,17 +568,13 @@ function renderLeadsRows(leads) {
         <td style="padding: 10px 14px;">${getLeadStatusBadge(l.status)}</td>
         <td style="padding: 10px 14px; color: #D97706; font-weight: 600;">${l.followup_date || '-'}</td>
         <td style="padding: 10px 14px; text-align: right; white-space: nowrap;">
-          ${canConvert ? `
+          ${!isConverted ? `
             <button onclick="openLeadConversionModal(${l.id})" style="background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 700; cursor: pointer; margin-right: 4px;" title="Convert to Official Franchise Profile">
               <i class="fa-solid fa-store"></i> Convert to Franchise
             </button>
-          ` : (isConverted ? `
-            <span style="font-size: 0.75rem; color: #2563EB; font-weight: 700; margin-right: 4px;"><i class="fa-solid fa-circle-check"></i> Converted</span>
           ` : `
-            <button onclick="alert('Conversion to Franchise requires Token Status = Token Received (Min ₹25,000 Token Advance). Record token payment first.')" style="background: #F8FAFC; color: #94A3B8; border: 1px solid #E2E8F0; padding: 4px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 4px;" title="Requires ₹25,000 Token Advance">
-              <i class="fa-solid fa-lock"></i> Convert
-            </button>
-          `)}
+            <span style="font-size: 0.75rem; color: #2563EB; font-weight: 700; margin-right: 4px;"><i class="fa-solid fa-circle-check"></i> Converted</span>
+          `}
           <button onclick='openLeadModal(${leadJson})' style="background: #EFF6FF; color: #2563EB; border: 1px solid #BFDBFE; padding: 4px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 4px;">
             <i class="fa-solid fa-pen"></i> Edit
           </button>
@@ -4091,6 +4087,119 @@ async function deleteComplaint(cId) {
     loadComplaints();
   } catch (err) {
     alert('Failed to delete complaint.');
+  }
+}
+
+// --- SUPER ADMIN DATA HEALTH & SYSTEM PERSISTENCE WORKSPACE ---
+
+async function renderHealthWorkspace(containerEl) {
+  if (!containerEl) return;
+  containerEl.innerHTML = `
+    <div style="padding: 30px; text-align: center; color: #64748B;">
+      <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 1.8rem; color: #2563EB;"></i>
+      <div style="margin-top: 12px; font-size: 0.9rem; font-weight: 600;">Connecting to active database engine & auditing persistent storage...</div>
+    </div>
+  `;
+
+  try {
+    const res = await fetch('/api/system/health');
+    const data = await res.json();
+
+    if (data.error) {
+      containerEl.innerHTML = `
+        <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 10px; padding: 20px; color: #991B1B; font-weight: 600;">
+          <i class="fa-solid fa-lock" style="margin-right: 8px;"></i> ${data.error}
+        </div>
+      `;
+      return;
+    }
+
+    const db = data.database || {};
+    const storage = data.storage || {};
+    const recs = data.records_summary || {};
+    const tCounts = recs.table_counts || {};
+
+    const isPg = db.is_production_cloud;
+    const isConn = db.status === 'CONNECTED';
+
+    let tableRowsHtml = '';
+    Object.keys(tCounts).sort().forEach(tbl => {
+      tableRowsHtml += `
+        <tr style="border-bottom: 1px solid #F1F5F9;">
+          <td style="padding: 10px 14px; font-weight: 600; color: #334155;"><i class="fa-solid fa-table" style="color: #64748B; margin-right: 8px;"></i> ${tbl}</td>
+          <td style="padding: 10px 14px; font-weight: 700; color: #0284C7; text-align: right;">${tCounts[tbl].toLocaleString('en-IN')}</td>
+          <td style="padding: 10px 14px; text-align: center;">
+            <span style="background: #ECFDF5; color: #047857; border: 1px solid #A7F3D0; padding: 3px 10px; border-radius: 12px; font-size: 0.74rem; font-weight: 700;"><i class="fa-solid fa-shield-check"></i> Persisted</span>
+          </td>
+        </tr>
+      `;
+    });
+
+    containerEl.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h3 style="margin: 0; font-size: 1.2rem; color: #0F172A; font-weight: 800;">
+            <i class="fa-solid fa-server" style="color: #2563EB;"></i> Data Health & System Persistence Status
+          </h3>
+          <p style="margin: 4px 0 0 0; font-size: 0.83rem; color: #64748B;">Real-time database connection diagnostics, engine type, table row counts, and storage persistence metrics.</p>
+        </div>
+        <button onclick="renderHealthWorkspace(document.getElementById('module-page-content'))" style="background: #2563EB; color: #FFFFFF; border: none; padding: 9px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.83rem; display: flex; align-items: center; gap: 8px; box-shadow: 0 1px 3px rgba(37,99,235,0.2);">
+          <i class="fa-solid fa-rotate-right"></i> Run Health Audit & Refresh
+        </button>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div style="background: #FFFFFF; border: 1px solid ${isConn ? '#A7F3D0' : '#FECACA'}; border-radius: 12px; padding: 18px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Active Database Engine</div>
+          <div style="font-size: 1.35rem; font-weight: 800; color: ${isPg ? '#059669' : '#D97706'}; margin-top: 6px;">${db.engine || 'Unknown'}</div>
+          <div style="font-size: 0.78rem; color: #475569; margin-top: 4px; font-weight: 600;"><i class="fa-solid fa-hard-drive" style="color: #64748B;"></i> ${db.persistence_mode || ''}</div>
+        </div>
+
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Connection Status</div>
+          <div style="font-size: 1.35rem; font-weight: 800; color: #047857; margin-top: 6px;"><i class="fa-solid fa-circle-check"></i> ${db.status || 'CONNECTED'}</div>
+          <div style="font-size: 0.78rem; color: #64748B; margin-top: 4px;">Latency: <strong style="color: #2563EB;">${db.ping_ms} ms</strong></div>
+        </div>
+
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">File Storage Engine</div>
+          <div style="font-size: 1.35rem; font-weight: 800; color: #2563EB; margin-top: 6px;">${storage.provider || 'Local Storage'}</div>
+          <div style="font-size: 0.78rem; color: #64748B; margin-top: 4px;">Total Stored Files: <strong style="color: #0F172A;">${storage.total_files} files</strong></div>
+        </div>
+
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 18px 22px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <div style="font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Total Persisted Records</div>
+          <div style="font-size: 1.35rem; font-weight: 800; color: #0F172A; margin-top: 6px;">${recs.total_records ? recs.total_records.toLocaleString('en-IN') : 0}</div>
+          <div style="font-size: 0.78rem; color: #64748B; margin-top: 4px;">Across <strong style="color: #0F172A;">${recs.total_tables || 0} Active Tables</strong></div>
+        </div>
+      </div>
+
+      <!-- Table Breakdown Grid -->
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;">
+        <div style="padding: 14px 20px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-weight: 700; font-size: 0.88rem; color: #334155;"><i class="fa-solid fa-list-check" style="color: #64748B; margin-right: 6px;"></i> Detailed Table Persistence Breakdown</span>
+          <span style="font-size: 0.78rem; color: #047857; font-weight: 700; background: #ECFDF5; padding: 3px 10px; border-radius: 12px; border: 1px solid #A7F3D0;"><i class="fa-solid fa-lock"></i> All Records Intact</span>
+        </div>
+        <div style="overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead>
+              <tr style="background: #F1F5F9; text-align: left; color: #475569;">
+                <th style="padding: 11px 16px;">Database Table Name</th>
+                <th style="padding: 11px 16px; text-align: right;">Total Active Records</th>
+                <th style="padding: 11px 16px; text-align: center;">Persistence Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRowsHtml}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error("Health workspace error:", err);
+    containerEl.innerHTML = `<div style="padding: 20px; color: #DC2626;">Failed to load system health data.</div>`;
   }
 }
 

@@ -190,7 +190,9 @@ class TokenRecord(db.Model):
 class SurveyVersion(db.Model):
     __tablename__ = 'survey_versions'
     id = db.Column(db.Integer, primary_key=True)
-    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=False)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
+    customer_name = db.Column(db.String(150), nullable=True)
     version_number = db.Column(db.Integer, default=1)
     surveyor_name = db.Column(db.String(100), nullable=False)
     survey_date = db.Column(db.String(50), nullable=False)
@@ -202,14 +204,18 @@ class SurveyVersion(db.Model):
     extracted_json = db.Column(db.Text, nullable=True)
     pdf_filename = db.Column(db.String(255), nullable=True)
     pdf_filepath = db.Column(db.String(255), nullable=True)
+    approved_by = db.Column(db.String(100), nullable=True)
+    approval_date = db.Column(db.String(50), nullable=True)
     remarks = db.Column(db.Text, nullable=True)
-    status = db.Column(db.String(50), default='Approved')
+    status = db.Column(db.String(50), default='Under Review') # Under Review, Approved, Rejected, Pending Changes, Agreement Signed
     created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
 
     def to_dict(self):
         return {
             'id': self.id,
             'franchise_id': self.franchise_id,
+            'lead_id': self.lead_id,
+            'customer_name': self.customer_name or '',
             'version_number': self.version_number,
             'surveyor_name': self.surveyor_name,
             'survey_date': self.survey_date,
@@ -221,6 +227,8 @@ class SurveyVersion(db.Model):
             'extracted_json': self.extracted_json or '{}',
             'pdf_filename': self.pdf_filename or '',
             'pdf_filepath': self.pdf_filepath or '',
+            'approved_by': self.approved_by or '',
+            'approval_date': self.approval_date or '',
             'remarks': self.remarks or '',
             'status': self.status,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
@@ -229,7 +237,9 @@ class SurveyVersion(db.Model):
 class Payment(db.Model):
     __tablename__ = 'payments'
     id = db.Column(db.Integer, primary_key=True)
-    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=False)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
+    customer_name = db.Column(db.String(150), nullable=True)
     amount = db.Column(db.Float, nullable=False)
     payment_date = db.Column(db.String(50), nullable=False)
     payment_type = db.Column(db.String(50), default='Franchise Fee')
@@ -245,6 +255,8 @@ class Payment(db.Model):
         return {
             'id': self.id,
             'franchise_id': self.franchise_id,
+            'lead_id': self.lead_id,
+            'customer_name': self.customer_name or '',
             'amount': self.amount,
             'payment_date': self.payment_date,
             'payment_type': self.payment_type,
@@ -588,7 +600,9 @@ class CompanySupport(db.Model):
 class Document(db.Model):
     __tablename__ = 'documents'
     id = db.Column(db.Integer, primary_key=True)
-    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=False)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
+    customer_name = db.Column(db.String(150), nullable=True)
     stage_name = db.Column(db.String(100), nullable=False)
     doc_title = db.Column(db.String(150), nullable=False)
     doc_type = db.Column(db.String(50), default='PDF')
@@ -603,6 +617,8 @@ class Document(db.Model):
         return {
             'id': self.id,
             'franchise_id': self.franchise_id,
+            'lead_id': self.lead_id,
+            'customer_name': self.customer_name or '',
             'stage_name': self.stage_name,
             'doc_title': self.doc_title,
             'doc_type': self.doc_type,

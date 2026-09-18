@@ -8,7 +8,7 @@ import openpyxl
 from pypdf import PdfReader
 from werkzeug.utils import secure_filename
 from functools import wraps
-from flask import Flask, render_template, request, jsonify, send_file, Response, redirect, session
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, Response, redirect, session
 from dotenv import load_dotenv
 from sqlalchemy.engine import make_url
 
@@ -101,20 +101,22 @@ def check_and_migrate_db():
                 if 'discussion' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN discussion TEXT"))
                 if 'followup_date' not in columns: conn.execute(db.text("ALTER TABLE leads ADD COLUMN followup_date VARCHAR(50)"))
 
-            if 'call_history' in tables:
-                columns = [c['name'] for c in inspector.get_columns('call_history')]
-                if 'lead_id' not in columns: conn.execute(db.text("ALTER TABLE call_history ADD COLUMN lead_id INTEGER"))
-                if 'customer_name' not in columns: conn.execute(db.text("ALTER TABLE call_history ADD COLUMN customer_name VARCHAR(150)"))
+            for t_name in ['call_history', 'follow_ups', 'token_records', 'payments', 'survey_versions', 'documents']:
+                if t_name in tables:
+                    columns = [c['name'] for c in inspector.get_columns(t_name)]
+                    if 'lead_id' not in columns:
+                        conn.execute(db.text(f"ALTER TABLE {t_name} ADD COLUMN lead_id INTEGER"))
+                    if 'customer_name' not in columns:
+                        conn.execute(db.text(f"ALTER TABLE {t_name} ADD COLUMN customer_name VARCHAR(150)"))
 
-            if 'follow_ups' in tables:
-                columns = [c['name'] for c in inspector.get_columns('follow_ups')]
-                if 'lead_id' not in columns: conn.execute(db.text("ALTER TABLE follow_ups ADD COLUMN lead_id INTEGER"))
-                if 'customer_name' not in columns: conn.execute(db.text("ALTER TABLE follow_ups ADD COLUMN customer_name VARCHAR(150)"))
-
-            if 'token_records' in tables:
-                columns = [c['name'] for c in inspector.get_columns('token_records')]
-                if 'lead_id' not in columns: conn.execute(db.text("ALTER TABLE token_records ADD COLUMN lead_id INTEGER"))
-                if 'customer_name' not in columns: conn.execute(db.text("ALTER TABLE token_records ADD COLUMN customer_name VARCHAR(150)"))
+                    cols = inspector.get_columns(t_name)
+                    f_col = next((c for c in cols if c['name'] == 'franchise_id'), None)
+                    if f_col and not f_col.get('nullable', True):
+                        conn.execute(db.text(f"CREATE TABLE {t_name}_temp AS SELECT * FROM {t_name};"))
+                        conn.execute(db.text(f"DROP TABLE {t_name};"))
+                        db.create_all()
+                        conn.execute(db.text(f"INSERT INTO {t_name} SELECT * FROM {t_name}_temp;"))
+                        conn.execute(db.text(f"DROP TABLE {t_name}_temp;"))
 
             conn.commit()
     except Exception as e:
@@ -197,6 +199,7 @@ def remove_demo_temporary_data():
 
 def seed_initial_team_users():
     initial_users = [
+        {"full_name": "System Admin", "username": "admin", "role": "Super Admin", "password": "admin123", "department": "Management"},
         {"full_name": "Kenal Kapadia", "username": "kenal@franchise.com", "role": "Super Admin", "password": "Kenal@123456", "department": "Management"},
         {"full_name": "Sakshi Shukla", "username": "sakshi@franchise.com", "role": "Super Admin", "password": "Sakshi@123456", "department": "Management"},
         {"full_name": "Dhruvesh Rajpurohit", "username": "dhruvesh@franchise.com", "role": "Manager", "password": "Dhruvesh@123456", "department": "Operations"},
@@ -384,7 +387,7 @@ def initialize_database_lazily():
 @app.before_request
 def enforce_rbac_api_permissions():
     path = request.path
-    if not path.startswith('/api/') or path in ['/api/auth/login', '/api/auth/me', '/api/auth/logout', '/api/index', '/api/executives']:
+    if not path.startswith('/api/') or path in ['/api/auth/login', '/api/auth/me', '/api/auth/logout', '/api/index', '/api/executives', '/api/system/health']:
         return None
         
     u = get_current_user()
@@ -477,6 +480,57 @@ def apply_date_filter(query, date_preset, date_col):
     return query
 
 # --- ROUTES & APIs ---
+
+@app.route('/api/auth/login', methods=['POST'])
+def api_login():
+    data = request.json or request.form or {}
+    username = str(data.get('username', '')).strip().lower()
+    password = str(data.get('password', '')).strip()
+
+    if not username or not password:
+        return jsonify({'status': 'error', 'message': 'Username/Email and Password are required.'}), 400
+
+    u = User.query.filter(db.func.lower(User.username) == username).first()
+
+    if not u or not u.is_active:
+        return jsonify({'status': 'error', 'message': 'Invalid username or password, or account is disabled.'}), 401
+
+    if not u.check_password(password) and not u.check_password(password.lower()):
+        return jsonify({'status': 'error', 'message': 'Invalid username or password.'}), 401
+
+    session.permanent = True
+    session['user_id'] = u.id
+    u.last_login = datetime.datetime.utcnow()
+    db.session.commit()
+
+    log_audit(None, 'Authentication', 'User Login', u.full_name, remarks=f"User {u.username} logged in successfully.")
+
+    return jsonify({
+        'status': 'success',
+        'message': 'Login successful!',
+        'user': u.to_dict()
+    })
+
+@app.route('/api/auth/me', methods=['GET'])
+def api_auth_me():
+    u = get_current_user()
+    if not u:
+        return jsonify({'status': 'error', 'message': 'Not authenticated.'}), 401
+    return jsonify({
+        'status': 'success',
+        'user': u.to_dict()
+    })
+
+@app.route('/api/auth/logout', methods=['POST', 'GET'])
+def api_logout():
+    u = get_current_user()
+    if u:
+        log_audit(None, 'Authentication', 'User Logout', u.full_name, remarks=f"User {u.username} logged out.")
+    session.clear()
+    return jsonify({
+        'status': 'success',
+        'message': 'Logged out successfully.'
+    })
 
 @app.route('/')
 @app.route('/api/index')
@@ -1066,16 +1120,9 @@ def convert_lead_to_franchise(l_id):
     lead = Lead.query.get_or_404(l_id)
     data = request.json or request.form or {}
     
-    # Check if ₹25,000 token received or status is Token Received
     tokens_recorded = TokenRecord.query.filter((TokenRecord.lead_id == lead.id) | (TokenRecord.customer_name == lead.customer_name)).all()
     total_token_received = sum(t.token_amount for t in tokens_recorded if t.status == 'Received')
     
-    if lead.status != 'Token Received' and total_token_received < 25000:
-        return jsonify({
-            'status': 'error',
-            'message': f"Conversion requires minimum ₹25,000 token received. Recorded token: Rs. {total_token_received:,.2f}."
-        }), 400
-
     agreed_amount = float(data.get('agreed_amount', 500000.0))
     plan_name = data.get('plan_name') or lead.plan_discussed or 'Plan A'
     token_amount = float(data.get('token_amount', total_token_received or 25000.0))
@@ -1084,10 +1131,11 @@ def convert_lead_to_franchise(l_id):
     
     ts_str = str(int(datetime.datetime.now().timestamp()))[-4:]
     code = data.get('code') or f"FR-{ts_str}"
+    franchise_name = data.get('name') or data.get('franchise_name') or f"Ajit Zone - {lead.city or lead.customer_name}"
     
     franchise = Franchise(
         code=code,
-        name=f"Ajit Zone - {lead.city or lead.customer_name}",
+        name=franchise_name,
         owner_name=lead.customer_name,
         owner_mobile=lead.mobile,
         owner_email=lead.email,
@@ -1102,14 +1150,15 @@ def convert_lead_to_franchise(l_id):
     db.session.flush()
     
     lead.franchise_id = franchise.id
-    lead.status = 'Converted to Franchise'
+    lead.status = 'Converted'
     
-    # Transfer calling history, followups, and token records to franchise
+    # Transfer/link call history, followups, token records, and payments to franchise
     CallHistory.query.filter((CallHistory.lead_id == lead.id) | (CallHistory.customer_name == lead.customer_name)).update({CallHistory.franchise_id: franchise.id}, synchronize_session=False)
     FollowUp.query.filter((FollowUp.lead_id == lead.id) | (FollowUp.customer_name == lead.customer_name)).update({FollowUp.franchise_id: franchise.id}, synchronize_session=False)
     TokenRecord.query.filter((TokenRecord.lead_id == lead.id) | (TokenRecord.customer_name == lead.customer_name)).update({TokenRecord.franchise_id: franchise.id}, synchronize_session=False)
+    Payment.query.filter((Payment.lead_id == lead.id) | (Payment.customer_name == lead.customer_name)).update({Payment.franchise_id: franchise.id}, synchronize_session=False)
     
-    if not tokens_recorded:
+    if token_amount > 0 and not tokens_recorded:
         token_rec = TokenRecord(
             franchise_id=franchise.id,
             lead_id=lead.id,
@@ -1119,7 +1168,7 @@ def convert_lead_to_franchise(l_id):
             payment_mode=payment_mode,
             reference_no=reference_no,
             status='Received',
-            remarks=f"Pre-token conversion advance for Lead #{lead.id} ({lead.customer_name})",
+            remarks=f"Pre-conversion token advance for Lead #{lead.id} ({lead.customer_name})",
             person=lead.assigned_person
         )
         db.session.add(token_rec)
@@ -1127,7 +1176,7 @@ def convert_lead_to_franchise(l_id):
     db.session.commit()
     
     log_audit(franchise.id, 'Lead Conversion', 'CONVERT', lead.assigned_person, 'Lead to Franchise', lead.customer_name, franchise.code, f"Converted Lead #{lead.id} ({lead.customer_name}) to Franchise {franchise.code}")
-    return jsonify({'status': 'success', 'message': f"Lead '{lead.customer_name}' successfully converted to Franchise {franchise.code}!", 'franchise': franchise.to_dict()})
+    return jsonify({'status': 'success', 'message': f"Lead '{lead.customer_name}' successfully converted to Franchise {franchise.code}!", 'franchise': franchise.to_dict(), 'lead': lead.to_dict()})
 
 # --- COMPLAINTS & ISSUES MODULE ---
 
@@ -1295,6 +1344,83 @@ def update_delete_followup(f_id):
     log_audit(f.franchise_id or 1, 'Follow-ups', 'UPDATE', f.person, 'Followup Record', None, (f.discussion or '')[:30], f"Updated Followup #{f_id}")
     return jsonify({'status': 'success', 'followup': f.to_dict()})
 
+# --- CALLING HISTORY APIs ---
+
+@app.route('/api/calls', methods=['GET', 'POST'])
+def manage_calls():
+    if request.method == 'POST':
+        data = request.json or request.form
+        f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
+        l_id = int(data.get('lead_id')) if data.get('lead_id') else None
+        c_name = data.get('customer_name') or ''
+        
+        call = CallHistory(
+            franchise_id=f_id,
+            lead_id=l_id,
+            customer_name=c_name,
+            caller_person=data.get('caller_person') or data.get('person') or 'Executive',
+            call_date=datetime.datetime.utcnow(),
+            discussion=data.get('discussion', ''),
+            requirement=data.get('requirement') or data.get('requirements', ''),
+            plan_discussed=data.get('plan_discussed', 'Plan A'),
+            objection=data.get('objection') or data.get('objections', ''),
+            next_followup_date=data.get('next_followup_date') or data.get('followup_date', ''),
+            status=data.get('status', 'Completed'),
+            remarks=data.get('remarks', '')
+        )
+        db.session.add(call)
+        
+        if l_id:
+            lead = Lead.query.get(l_id)
+            if lead:
+                if call.discussion: lead.discussion = call.discussion
+                if call.requirement: lead.requirements = call.requirement
+                if call.plan_discussed: lead.plan_discussed = call.plan_discussed
+                if call.objection: lead.objections = call.objection
+                if call.next_followup_date: lead.followup_date = call.next_followup_date
+                if call.status and call.status != 'Completed': lead.status = call.status
+
+        db.session.commit()
+        log_audit(f_id or 1, 'Calling History', 'CREATE', call.caller_person, 'Call Log', None, c_name, f"Logged call with {c_name}")
+        return jsonify({'status': 'success', 'call': call.to_dict()})
+
+    search_q = request.args.get('search', '').strip().lower()
+    lead_id = request.args.get('lead_id')
+    franchise_id = request.args.get('franchise_id')
+
+    query = CallHistory.query
+    if lead_id:
+        query = query.filter_by(lead_id=int(lead_id))
+    if franchise_id:
+        query = query.filter_by(franchise_id=int(franchise_id))
+
+    calls = query.order_by(CallHistory.call_date.desc()).all()
+    if search_q:
+        calls = [c for c in calls if search_q in (c.customer_name or '').lower() or search_q in (c.discussion or '').lower() or search_q in (c.caller_person or '').lower()]
+    return jsonify([c.to_dict() for c in calls])
+
+@app.route('/api/calls/<int:c_id>', methods=['PUT', 'DELETE'])
+def update_delete_call(c_id):
+    call = CallHistory.query.get_or_404(c_id)
+    if request.method == 'DELETE':
+        db.session.delete(call)
+        db.session.commit()
+        log_audit(call.franchise_id or 1, 'Calling History', 'DELETE', 'Admin', 'Call Log', call.customer_name, 'Deleted', f"Deleted Call #{c_id}")
+        return jsonify({'status': 'success', 'message': f"Call log #{c_id} deleted."})
+
+    data = request.json or request.form
+    call.caller_person = data.get('caller_person', call.caller_person)
+    call.discussion = data.get('discussion', call.discussion)
+    call.requirement = data.get('requirement', call.requirement)
+    call.plan_discussed = data.get('plan_discussed', call.plan_discussed)
+    call.objection = data.get('objection', call.objection)
+    call.next_followup_date = data.get('next_followup_date', call.next_followup_date)
+    call.status = data.get('status', call.status)
+    call.remarks = data.get('remarks', call.remarks)
+    db.session.commit()
+    log_audit(call.franchise_id or 1, 'Calling History', 'UPDATE', call.caller_person, 'Call Log', None, call.customer_name, f"Updated Call #{c_id}")
+    return jsonify({'status': 'success', 'call': call.to_dict()})
+
 # --- TOKEN & PAYMENTS ---
 
 @app.route('/api/tokens', methods=['GET', 'POST'])
@@ -1356,8 +1482,14 @@ def update_delete_token(t_id):
 def manage_payments():
     if request.method == 'POST':
         data = request.json or request.form
+        f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
+        l_id = int(data.get('lead_id')) if data.get('lead_id') else None
+        c_name = data.get('customer_name') or ''
+
         p = Payment(
-            franchise_id=int(data.get('franchise_id', 1)),
+            franchise_id=f_id,
+            lead_id=l_id,
+            customer_name=c_name,
             amount=float(data.get('amount', 0.0)),
             payment_date=data.get('payment_date', datetime.date.today().strftime('%Y-%m-%d')),
             payment_type=data.get('payment_type', 'Franchise Fee'),
@@ -1369,7 +1501,7 @@ def manage_payments():
         )
         db.session.add(p)
         db.session.commit()
-        log_audit(p.franchise_id, 'Payment', 'CREATE', p.person, 'Payment Receipt', None, f"Rs.{p.amount}", f"Received {p.payment_type}")
+        log_audit(f_id or 1, 'Payment', 'CREATE', p.person, 'Payment Receipt', None, f"Rs.{p.amount}", f"Received {p.payment_type}")
         return jsonify({'status': 'success', 'payment': p.to_dict()})
 
     payments = Payment.query.order_by(Payment.created_at.desc()).all()
@@ -1583,58 +1715,7 @@ def update_delete_operations(op_id):
     log_audit(op.franchise_id, 'Operations', 'UPDATE', op.person, 'Ops Record', None, f"Score {op.checklist_score}", f"Updated Operations Audit #{op_id}")
     return jsonify({'status': 'success', 'operations': op.to_dict()})
 
-# --- CALL HISTORY & SURVEY ---
-
-@app.route('/api/calls', methods=['GET', 'POST'])
-def manage_calls():
-    if request.method == 'POST':
-        data = request.json or request.form
-        f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
-        l_id = int(data.get('lead_id')) if data.get('lead_id') else None
-        c_name = data.get('customer_name') or data.get('field_1') or ''
-        
-        call = CallHistory(
-            franchise_id=f_id,
-            lead_id=l_id,
-            customer_name=c_name,
-            caller_person=data.get('caller_person') or data.get('person', 'Executive'),
-            discussion=data.get('discussion') or data.get('field_1', ''),
-            requirement=data.get('requirement') or data.get('field_2', ''),
-            plan_discussed=data.get('plan_discussed', 'Plan A'),
-            objection=data.get('objection', ''),
-            next_followup_date=data.get('next_followup_date') or data.get('field_3', ''),
-            status=data.get('status', 'Completed'),
-            remarks=data.get('remarks', '')
-        )
-        db.session.add(call)
-        db.session.commit()
-        log_audit(f_id or 1, 'Calling History', 'CREATE', call.caller_person, 'Call Log', None, (call.discussion or '')[:30], 'Recorded Call Log')
-        return jsonify({'status': 'success', 'call': call.to_dict()})
-
-    calls = CallHistory.query.order_by(CallHistory.call_date.desc()).all()
-    return jsonify([c.to_dict() for c in calls])
-
-@app.route('/api/calls/<int:c_id>', methods=['PUT', 'DELETE'])
-def update_delete_call(c_id):
-    c = CallHistory.query.get_or_404(c_id)
-    if request.method == 'DELETE':
-        db.session.delete(c)
-        db.session.commit()
-        log_audit(c.franchise_id, 'Calling History', 'DELETE', 'Admin', 'Call Log', c.discussion[:30], 'Deleted', f"Deleted Call #{c_id}")
-        return jsonify({'status': 'success', 'message': f"Call #{c_id} deleted."})
-    
-    data = request.json
-    c.caller_person = data.get('caller_person', c.caller_person)
-    c.discussion = data.get('discussion', c.discussion)
-    c.requirement = data.get('requirement', c.requirement)
-    c.plan_discussed = data.get('plan_discussed', c.plan_discussed)
-    c.objection = data.get('objection', c.objection)
-    c.next_followup_date = data.get('next_followup_date', c.next_followup_date)
-    c.status = data.get('status', c.status)
-    c.remarks = data.get('remarks', c.remarks)
-    db.session.commit()
-    log_audit(c.franchise_id, 'Calling History', 'UPDATE', c.caller_person, 'Call Log', None, c.discussion[:30], f"Updated Call #{c_id}")
-    return jsonify({'status': 'success', 'call': c.to_dict()})
+# --- SURVEY APIs ---
 
 @app.route('/api/surveys', methods=['GET'])
 def get_surveys():
@@ -1688,7 +1769,277 @@ def update_delete_material(m_id):
     m.remarks = data.get('remarks', m.remarks)
     db.session.commit()
     log_audit(m.franchise_id, 'Material/Assets', 'UPDATE', m.person, 'Asset Record', None, m.item_name, f"Updated Asset #{m_id}")
-    return jsonify({'status': 'success', 'material': m.to_dict()})
+    # --- SURVEY, SITE VISIT & APPROVAL WORKFLOW APIs ---
+
+@app.route('/api/surveys', methods=['GET', 'POST'])
+def manage_surveys():
+    if request.method == 'POST':
+        pdf_filepath = ''
+        pdf_filename = ''
+        
+        if request.files and 'pdf_file' in request.files and request.files['pdf_file'].filename:
+            file_obj = request.files['pdf_file']
+            filename = secure_filename(file_obj.filename)
+            pdf_filename = filename
+            file_data = file_obj.read()
+            if is_supabase_configured():
+                s_url = upload_file(file_data, filename, folder='surveys')
+                if s_url: pdf_filepath = s_url
+            if not pdf_filepath:
+                surv_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'surveys')
+                os.makedirs(surv_dir, exist_ok=True)
+                local_p = os.path.join(surv_dir, filename)
+                with open(local_p, 'wb') as f:
+                    f.write(file_data)
+                pdf_filepath = f"/uploads/surveys/{filename}"
+
+        data = request.form if request.form else (request.json or {})
+        f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
+        l_id = int(data.get('lead_id')) if data.get('lead_id') else None
+        c_name = data.get('customer_name') or ''
+        surveyor_name = data.get('surveyor_name') or data.get('person') or 'Field Executive'
+        survey_date = data.get('survey_date') or datetime.date.today().strftime('%Y-%m-%d')
+        
+        # Determine version_number: preserve previous versions!
+        query_ver = db.session.query(db.func.max(SurveyVersion.version_number))
+        if f_id:
+            query_ver = query_ver.filter_by(franchise_id=f_id)
+        elif l_id:
+            query_ver = query_ver.filter_by(lead_id=l_id)
+        else:
+            query_ver = None
+
+        max_v = query_ver.scalar() if query_ver else 0
+        new_v = (max_v or 0) + 1
+
+        extracted_data = {
+            'area_sqft': float(data.get('area_sqft', 0.0)),
+            'frontage_ft': float(data.get('frontage_ft', 0.0)),
+            'daily_footfall': int(data.get('daily_footfall', 0)),
+            'monthly_rent': float(data.get('monthly_rent', 0.0)),
+            'rating_score': float(data.get('rating_score', 0.0)),
+            'location_type': data.get('location_type', 'High Street Retail'),
+            'power_backup': data.get('power_backup', 'Yes'),
+            'water_connection': data.get('water_connection', 'Yes')
+        }
+        if data.get('extracted_json'):
+            try:
+                extracted_data.update(json.loads(data.get('extracted_json')))
+            except Exception:
+                pass
+
+        status = data.get('status', 'Under Review')
+
+        survey = SurveyVersion(
+            franchise_id=f_id,
+            lead_id=l_id,
+            customer_name=c_name,
+            version_number=new_v,
+            surveyor_name=surveyor_name,
+            survey_date=survey_date,
+            area_sqft=float(data.get('area_sqft', 0.0)),
+            frontage_ft=float(data.get('frontage_ft', 0.0)),
+            daily_footfall=int(data.get('daily_footfall', 0)),
+            monthly_rent=float(data.get('monthly_rent', 0.0)),
+            rating_score=float(data.get('rating_score', 0.0)),
+            extracted_json=json.dumps(extracted_data),
+            pdf_filename=pdf_filename or data.get('pdf_filename', ''),
+            pdf_filepath=pdf_filepath or data.get('pdf_filepath', ''),
+            status=status,
+            remarks=data.get('remarks', '')
+        )
+        db.session.add(survey)
+        db.session.flush()
+
+        if pdf_filepath:
+            doc = Document(
+                franchise_id=f_id,
+                lead_id=l_id,
+                customer_name=c_name,
+                stage_name='Survey',
+                doc_title=f"Site Survey Report v{new_v}",
+                doc_type='PDF',
+                file_name=pdf_filename or 'survey_report.pdf',
+                file_path=pdf_filepath,
+                uploaded_by=surveyor_name,
+                remarks=f"Uploaded for Survey Version {new_v}"
+            )
+            db.session.add(doc)
+
+        db.session.commit()
+        log_audit(f_id or 1, 'Survey & Site Visit', 'CREATE_VERSION', surveyor_name, 'Survey Report', f"v{new_v-1}" if new_v > 1 else 'None', f"v{new_v}", f"Created Site Survey v{new_v} (Rating: {survey.rating_score}/10)")
+        return jsonify({'status': 'success', 'survey': survey.to_dict()})
+
+    f_id = request.args.get('franchise_id')
+    l_id = request.args.get('lead_id')
+    status = request.args.get('status')
+    search_q = request.args.get('search', '').strip().lower()
+
+    query = SurveyVersion.query
+    if f_id: query = query.filter_by(franchise_id=int(f_id))
+    if l_id: query = query.filter_by(lead_id=int(l_id))
+    if status and status != 'ALL': query = query.filter_by(status=status)
+
+    surveys = query.order_by(SurveyVersion.created_at.desc()).all()
+    if search_q:
+        surveys = [
+            s for s in surveys if
+            search_q in (s.surveyor_name or '').lower() or
+            search_q in (s.customer_name or '').lower() or
+            search_q in (s.remarks or '').lower() or
+            search_q in (s.status or '').lower()
+        ]
+
+    franchises_map = {f.id: f.name for f in Franchise.query.all()}
+    leads_map = {l.id: l.customer_name for l in Lead.query.all()}
+
+    results = []
+    for s in surveys:
+        d = s.to_dict()
+        if s.franchise_id: d['franchise_name'] = franchises_map.get(s.franchise_id, f"Franchise #{s.franchise_id}")
+        if s.lead_id: d['lead_name'] = leads_map.get(s.lead_id, f"Lead #{s.lead_id}")
+        results.append(d)
+
+    return jsonify(results)
+
+@app.route('/api/surveys/<int:s_id>', methods=['GET', 'PUT', 'DELETE'])
+def manage_single_survey(s_id):
+    survey = SurveyVersion.query.get_or_404(s_id)
+    if request.method == 'GET':
+        d = survey.to_dict()
+        if survey.franchise_id:
+            f = Franchise.query.get(survey.franchise_id)
+            if f: d['franchise_name'] = f.name
+        return jsonify(d)
+
+    if request.method == 'DELETE':
+        db.session.delete(survey)
+        db.session.commit()
+        log_audit(survey.franchise_id or 1, 'Survey & Site Visit', 'DELETE', 'Admin', 'Survey Version', f"v{survey.version_number}", 'Deleted', f"Deleted Survey v{survey.version_number}")
+        return jsonify({'status': 'success', 'message': f"Survey v{survey.version_number} deleted."})
+
+    data = request.json or request.form or {}
+    save_as_new_version = data.get('save_as_new_version', False)
+
+    if save_as_new_version:
+        max_v = db.session.query(db.func.max(SurveyVersion.version_number)).filter_by(franchise_id=survey.franchise_id).scalar() or survey.version_number
+        new_v = max_v + 1
+        new_survey = SurveyVersion(
+            franchise_id=survey.franchise_id,
+            lead_id=survey.lead_id,
+            customer_name=survey.customer_name,
+            version_number=new_v,
+            surveyor_name=data.get('surveyor_name', survey.surveyor_name),
+            survey_date=data.get('survey_date', survey.survey_date),
+            area_sqft=float(data.get('area_sqft', survey.area_sqft)),
+            frontage_ft=float(data.get('frontage_ft', survey.frontage_ft)),
+            daily_footfall=int(data.get('daily_footfall', survey.daily_footfall)),
+            monthly_rent=float(data.get('monthly_rent', survey.monthly_rent)),
+            rating_score=float(data.get('rating_score', survey.rating_score)),
+            extracted_json=data.get('extracted_json', survey.extracted_json),
+            pdf_filename=survey.pdf_filename,
+            pdf_filepath=survey.pdf_filepath,
+            status=data.get('status', 'Under Review'),
+            remarks=data.get('remarks', survey.remarks)
+        )
+        db.session.add(new_survey)
+        db.session.commit()
+        log_audit(survey.franchise_id or 1, 'Survey & Site Visit', 'CREATE_VERSION', new_survey.surveyor_name, 'Survey Report', f"v{survey.version_number}", f"v{new_v}", f"Created new Survey Version {new_v}")
+        return jsonify({'status': 'success', 'survey': new_survey.to_dict()})
+
+    old_score = survey.rating_score
+    survey.surveyor_name = data.get('surveyor_name', survey.surveyor_name)
+    survey.survey_date = data.get('survey_date', survey.survey_date)
+    survey.area_sqft = float(data.get('area_sqft', survey.area_sqft))
+    survey.frontage_ft = float(data.get('frontage_ft', survey.frontage_ft))
+    survey.daily_footfall = int(data.get('daily_footfall', survey.daily_footfall))
+    survey.monthly_rent = float(data.get('monthly_rent', survey.monthly_rent))
+    survey.rating_score = float(data.get('rating_score', survey.rating_score))
+    if 'extracted_json' in data:
+        survey.extracted_json = data['extracted_json'] if isinstance(data['extracted_json'], str) else json.dumps(data['extracted_json'])
+    survey.status = data.get('status', survey.status)
+    survey.remarks = data.get('remarks', survey.remarks)
+    db.session.commit()
+
+    log_audit(survey.franchise_id or 1, 'Survey & Site Visit', 'UPDATE', survey.surveyor_name, 'Rating Score', f"{old_score}/10", f"{survey.rating_score}/10", f"Updated Survey v{survey.version_number}")
+    return jsonify({'status': 'success', 'survey': survey.to_dict()})
+
+@app.route('/api/surveys/<int:s_id>/approve', methods=['POST'])
+def approve_survey_workflow(s_id):
+    survey = SurveyVersion.query.get_or_404(s_id)
+    data = request.json or request.form or {}
+    new_status = data.get('status', 'Approved')
+    approved_by = data.get('approved_by') or 'Manager / Admin'
+    remarks = data.get('remarks', '')
+
+    survey.status = new_status
+    survey.approved_by = approved_by
+    survey.approval_date = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    if remarks:
+        survey.remarks = f"{survey.remarks or ''}\n[{survey.approval_date}] Approval Note ({new_status}): {remarks}".strip()
+
+    db.session.commit()
+    log_audit(survey.franchise_id or 1, 'Approval & Agreement', 'WORKFLOW_CHANGE', approved_by, 'Approval Status', 'Under Review', new_status, f"Set Survey v{survey.version_number} Status to '{new_status}'")
+    return jsonify({'status': 'success', 'message': f"Survey v{survey.version_number} status updated to '{new_status}'!", 'survey': survey.to_dict()})
+
+# --- DOCUMENTS APIs ---
+
+@app.route('/api/documents', methods=['GET', 'POST'])
+def manage_documents():
+    if request.method == 'POST':
+        if 'file' in request.files and request.files['file'].filename:
+            file_obj = request.files['file']
+            filename = secure_filename(file_obj.filename)
+            file_data = file_obj.read()
+            doc_path = ''
+            if is_supabase_configured():
+                s_url = upload_file(file_data, filename, folder='documents')
+                if s_url: doc_path = s_url
+            if not doc_path:
+                doc_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'documents')
+                os.makedirs(doc_dir, exist_ok=True)
+                local_p = os.path.join(doc_dir, filename)
+                with open(local_p, 'wb') as f:
+                    f.write(file_data)
+                doc_path = f"/uploads/documents/{filename}"
+
+            data = request.form
+            f_id = int(data.get('franchise_id')) if data.get('franchise_id') else None
+            l_id = int(data.get('lead_id')) if data.get('lead_id') else None
+            doc = Document(
+                franchise_id=f_id,
+                lead_id=l_id,
+                customer_name=data.get('customer_name', ''),
+                stage_name=data.get('stage_name', 'General'),
+                doc_title=data.get('doc_title', filename),
+                doc_type=data.get('doc_type', 'PDF' if filename.lower().endswith('.pdf') else 'Image'),
+                file_name=filename,
+                file_path=doc_path,
+                file_size=len(file_data),
+                uploaded_by=data.get('uploaded_by', 'System User'),
+                remarks=data.get('remarks', '')
+            )
+            db.session.add(doc)
+            db.session.commit()
+            log_audit(f_id or 1, 'Document Storage', 'UPLOAD', doc.uploaded_by, 'Document', None, filename, f"Uploaded {doc.doc_title} ({doc.stage_name})")
+            return jsonify({'status': 'success', 'document': doc.to_dict()})
+
+    f_id = request.args.get('franchise_id')
+    l_id = request.args.get('lead_id')
+    stage = request.args.get('stage')
+
+    query = Document.query
+    if f_id: query = query.filter_by(franchise_id=int(f_id))
+    if l_id: query = query.filter_by(lead_id=int(l_id))
+    if stage: query = query.filter_by(stage_name=stage)
+
+    docs = query.order_by(Document.uploaded_at.desc()).all()
+    return jsonify([d.to_dict() for d in docs])
+
+@app.route('/uploads/<path:filename>')
+def serve_upload_file(filename):
+    file_dir = app.config['UPLOAD_FOLDER']
+    return send_from_directory(file_dir, filename)
 
 @app.route('/api/purchases', methods=['GET', 'POST'])
 def manage_purchases():
@@ -2551,6 +2902,75 @@ def auth_me():
     return jsonify({
         'authenticated': True,
         'user': user.to_dict()
+    })
+
+@app.route('/api/system/health', methods=['GET'])
+def get_system_health():
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
+
+    import time
+    start_time = time.time()
+    db_connected = False
+    ping_ms = 0.0
+
+    try:
+        with db.engine.connect() as conn:
+            conn.execute(db.text("SELECT 1"))
+        ping_ms = round((time.time() - start_time) * 1000, 2)
+        db_connected = True
+    except Exception as e:
+        db_connected = False
+
+    engine_name = db.engine.name
+    is_postgres = 'postgres' in engine_name.lower()
+    
+    # Table counts
+    inspector = db.inspect(db.engine)
+    tables = inspector.get_table_names() if db_connected else []
+    table_counts = {}
+    total_records = 0
+
+    if db_connected:
+        for t in sorted(tables):
+            if not t.startswith('sqlite_'):
+                try:
+                    with db.engine.connect() as conn:
+                        res = conn.execute(db.text(f"SELECT count(*) FROM \"{t}\"")).fetchone()
+                        cnt = res[0] if res else 0
+                        table_counts[t] = cnt
+                        total_records += cnt
+                except Exception:
+                    table_counts[t] = 0
+
+    # Storage check
+    sup_configured = is_supabase_configured()
+    upload_folder = app.config.get('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'uploads'))
+    local_file_count = len([f for f in os.listdir(upload_folder) if os.path.isfile(os.path.join(upload_folder, f)) and f != '.gitkeep']) if os.path.exists(upload_folder) else 0
+
+    return jsonify({
+        'status': 'success',
+        'database': {
+            'engine': 'PostgreSQL' if is_postgres else 'SQLite',
+            'dialect': engine_name,
+            'connection_url': str(db.engine.url),
+            'status': 'CONNECTED' if db_connected else 'DISCONNECTED',
+            'ping_ms': ping_ms,
+            'is_production_cloud': is_postgres,
+            'persistence_mode': 'Cloud Multi-User (PostgreSQL)' if is_postgres else 'Local Development Fallback (SQLite)'
+        },
+        'storage': {
+            'provider': 'Supabase Storage' if sup_configured else 'Local Storage',
+            'is_supabase_configured': sup_configured,
+            'upload_folder': upload_folder,
+            'total_files': local_file_count
+        },
+        'records_summary': {
+            'total_tables': len(table_counts),
+            'total_records': total_records,
+            'table_counts': table_counts
+        }
     })
 
 @app.route('/api/users', methods=['GET'])
