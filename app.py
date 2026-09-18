@@ -24,7 +24,10 @@ from models import (
 from services.report_service import generate_pdf_report, generate_excel_report, generate_word_report
 from services.storage_service import upload_file, get_file_url, is_supabase_configured
 
+from werkzeug.middleware.proxy_fix import ProxyFix
+
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = os.environ.get('SECRET_KEY', 'franchise_management_app_secret_key_2026')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -108,15 +111,6 @@ def check_and_migrate_db():
                         conn.execute(db.text(f"ALTER TABLE {t_name} ADD COLUMN lead_id INTEGER"))
                     if 'customer_name' not in columns:
                         conn.execute(db.text(f"ALTER TABLE {t_name} ADD COLUMN customer_name VARCHAR(150)"))
-
-                    cols = inspector.get_columns(t_name)
-                    f_col = next((c for c in cols if c['name'] == 'franchise_id'), None)
-                    if f_col and not f_col.get('nullable', True):
-                        conn.execute(db.text(f"CREATE TABLE {t_name}_temp AS SELECT * FROM {t_name};"))
-                        conn.execute(db.text(f"DROP TABLE {t_name};"))
-                        db.create_all()
-                        conn.execute(db.text(f"INSERT INTO {t_name} SELECT * FROM {t_name}_temp;"))
-                        conn.execute(db.text(f"DROP TABLE {t_name}_temp;"))
 
             conn.commit()
     except Exception as e:
@@ -1806,8 +1800,8 @@ def manage_surveys():
             query_ver = query_ver.filter_by(franchise_id=f_id)
         elif l_id:
             query_ver = query_ver.filter_by(lead_id=l_id)
-        else:
-            query_ver = None
+        elif c_name:
+            query_ver = query_ver.filter_by(customer_name=c_name)
 
         max_v = query_ver.scalar() if query_ver else 0
         new_v = (max_v or 0) + 1
@@ -1922,7 +1916,16 @@ def manage_single_survey(s_id):
     save_as_new_version = data.get('save_as_new_version', False)
 
     if save_as_new_version:
-        max_v = db.session.query(db.func.max(SurveyVersion.version_number)).filter_by(franchise_id=survey.franchise_id).scalar() or survey.version_number
+        query_ver = db.session.query(db.func.max(SurveyVersion.version_number))
+        if survey.franchise_id:
+            query_ver = query_ver.filter_by(franchise_id=survey.franchise_id)
+        elif survey.lead_id:
+            query_ver = query_ver.filter_by(lead_id=survey.lead_id)
+        elif survey.customer_name:
+            query_ver = query_ver.filter_by(customer_name=survey.customer_name)
+
+        db_max = query_ver.scalar() if query_ver else 0
+        max_v = max(db_max or 0, survey.version_number or 0)
         new_v = max_v + 1
         new_survey = SurveyVersion(
             franchise_id=survey.franchise_id,
