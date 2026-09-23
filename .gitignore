@@ -1,6 +1,9 @@
 # Environment variables & secrets (NEVER push to GitHub!)
 .env
 .env.local
+config/google_service_account.json
+*.json.secret
+google_service_account.json
 
 # Local SQLite Database & Local Uploads
 *.db

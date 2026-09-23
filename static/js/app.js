@@ -1,5 +1,6 @@
 // Global State Management
 let currentRole = 'Admin';
+let currentUserPermissions = {};
 let activeFranchiseId = null;
 let currentProfileTab = 'overview';
 let activePage = 'dashboard';
@@ -10,7 +11,170 @@ let allFranchisesList = [];
 
 document.addEventListener('DOMContentLoaded', () => {
   checkAuthSession();
+  restoreSidebarState();
+  initEventListeners();
 });
+
+async function checkAuthSession() {
+  const loginScreen = document.getElementById('login-screen');
+  const appContainer = document.getElementById('app-container');
+  if (loginScreen) loginScreen.style.display = 'none';
+  if (appContainer) appContainer.style.display = 'flex';
+
+  try {
+    const res = await fetch('/api/auth/me');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user) {
+        currentRole = data.user.role || 'Super Admin';
+        currentUserPermissions = data.user.permissions || {};
+        
+        const roleBadge = document.getElementById('current-role-badge');
+        if (roleBadge) roleBadge.innerText = currentRole;
+
+        const roleSelect = document.getElementById('topbar-role-select');
+        if (roleSelect) roleSelect.value = currentRole;
+        
+        const userFullname = document.getElementById('current-user-fullname');
+        if (userFullname) userFullname.innerText = data.user.full_name || 'Sakshi Shukla';
+
+        const topUserFullname = document.getElementById('top-user-fullname');
+        if (topUserFullname) topUserFullname.innerText = data.user.full_name || 'Sakshi Shukla';
+
+        const topUserRole = document.getElementById('top-user-role');
+        if (topUserRole) topUserRole.innerText = currentRole;
+
+        const initials = (data.user.full_name || 'Sakshi Shukla').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        const topAvatar = document.getElementById('top-avatar-circle');
+        if (topAvatar) topAvatar.innerText = initials || 'SS';
+
+        const nameEl = document.getElementById('dash-greeting-title');
+        if (nameEl) {
+          const firstName = (data.user.full_name || 'Sakshi').split(' ')[0];
+          nameEl.innerText = `Good Morning, ${firstName}!`;
+        }
+
+        applySidebarPermissions(currentUserPermissions, currentRole);
+        loadDashboard();
+        return;
+      }
+    }
+  } catch (err) {
+    console.error('Session init info:', err);
+  }
+
+  currentRole = 'Super Admin';
+  loadDashboard();
+}
+
+async function handleTestRoleChange(newRole) {
+  try {
+    const res = await fetch('/api/auth/switch_role', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newRole })
+    });
+    const data = await res.json();
+    if (data.status === 'success' && data.user) {
+      currentRole = data.user.role;
+      currentUserPermissions = data.user.permissions || {};
+      
+      const roleBadge = document.getElementById('current-role-badge');
+      if (roleBadge) roleBadge.innerText = currentRole;
+
+      const userFullname = document.getElementById('current-user-fullname');
+      if (userFullname) userFullname.innerText = data.user.full_name;
+
+      const topUserFullname = document.getElementById('top-user-fullname');
+      if (topUserFullname) topUserFullname.innerText = data.user.full_name;
+
+      const topUserRole = document.getElementById('top-user-role');
+      if (topUserRole) topUserRole.innerText = currentRole;
+
+      const initials = (data.user.full_name || 'Sakshi Shukla').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+      const topAvatar = document.getElementById('top-avatar-circle');
+      if (topAvatar) topAvatar.innerText = initials || 'SS';
+
+      const roleSelect = document.getElementById('topbar-role-select');
+      if (roleSelect) roleSelect.value = currentRole;
+
+      applySidebarPermissions(currentUserPermissions, currentRole);
+      switchPage(activePage || 'dashboard');
+    }
+  } catch (err) {
+    console.error('Failed to switch test role:', err);
+  }
+}
+
+async function handleLogout() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+  } catch (e) {}
+  loadDashboard();
+}
+
+function applySidebarPermissions(userPermissions, userRole) {
+  if (userRole === 'Super Admin') {
+    document.querySelectorAll('#sidebar .nav-category, #sidebar li, #sidebar .nav-single-item').forEach(el => {
+      el.style.display = '';
+    });
+    return;
+  }
+
+  const navModuleMap = {
+    'nav-leads': 'leads',
+    'nav-calling': 'calling',
+    'nav-followup': 'followup',
+    'nav-plans': 'plans',
+    'nav-token': 'token',
+    'nav-survey': 'survey',
+    'nav-agreement': 'agreement',
+    'nav-payments': 'payments',
+    'nav-visit_expenses': 'visit_expenses',
+    'nav-interior': 'interior',
+    'nav-branding': 'branding',
+    'nav-marketing': 'marketing',
+    'nav-training': 'training',
+    'nav-operations': 'operations',
+    'nav-influencer': 'influencer',
+    'nav-opening': 'opening',
+    'nav-active': 'active',
+    'nav-materials': 'materials',
+    'nav-purchases': 'purchases',
+    'nav-gr': 'gr',
+    'nav-expenses': 'expenses',
+    'nav-support': 'support',
+    'nav-complaints': 'complaints',
+    'nav-audit': 'audit',
+    'nav-reports': 'reports',
+    'nav-users': 'user_management',
+    'nav-permissions': 'user_management'
+  };
+
+  const perms = userPermissions || {};
+
+  Object.keys(navModuleMap).forEach(navId => {
+    const navEl = document.getElementById(navId);
+    if (!navEl) return;
+    const modKey = navModuleMap[navId];
+    
+    let canView = false;
+    if (modKey === 'user_management') {
+      canView = (userRole === 'Super Admin');
+    } else if (perms[modKey]) {
+      canView = Boolean(perms[modKey].view || perms[modKey].read);
+    } else {
+      canView = true;
+    }
+
+    navEl.style.display = canView ? '' : 'none';
+  });
+
+  document.querySelectorAll('#sidebar .nav-category').forEach(catEl => {
+    const visibleItems = catEl.querySelectorAll('ul.submenu li:not([style*="display: none"])');
+    catEl.style.display = (visibleItems && visibleItems.length > 0) ? '' : 'none';
+  });
+}
 
 function initEventListeners() {
   const searchInput = document.getElementById('global-search');
@@ -86,17 +250,222 @@ async function loadDashboard() {
     const data = await response.json();
     dashboardData = data;
 
-    document.getElementById('kpi-total-franchises').innerText = data.total_franchises || 0;
-    document.getElementById('kpi-active-franchises').innerText = data.active_franchises || 0;
-    document.getElementById('kpi-net-purchase').innerText = `Rs. ${(data.net_purchase || 0).toLocaleString('en-IN')}`;
-    document.getElementById('kpi-gr-percent').innerText = `${data.gr_percent || 0}%`;
-    document.getElementById('kpi-outstanding').innerText = `Rs. ${(data.outstanding || 0).toLocaleString('en-IN')}`;
-    document.getElementById('kpi-company-support').innerText = `Rs. ${(data.total_company_support || 0).toLocaleString('en-IN')}`;
+    // Header Greeting & Date
+    const nameEl = document.getElementById('dash-greeting-title');
+    if (nameEl) {
+      const userFullName = data.current_user?.full_name || 'Sakshi Shukla';
+      const firstName = userFullName.split(' ')[0] || 'Sakshi';
+      nameEl.innerText = `Good Morning, ${firstName}!`;
+    }
 
-    renderFranchiseCards(data.franchise_cards);
+    const dateEl = document.getElementById('dash-header-date');
+    if (dateEl) {
+      dateEl.innerText = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    // 5 Pastel KPI Card Values
+    const setElemText = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
+
+    setElemText('kpi-total-leads-val', data.total_leads || 0);
+    setElemText('kpi-pending-followups-val', data.pending_followups || 0);
+    setElemText('kpi-interested-plans-val', data.interested_plans || 0);
+    setElemText('kpi-tokens-received-val', data.tokens_received || 0);
+    setElemText('kpi-active-franchises-val', data.active_franchises || 0);
+
+    // KPI Growth Trend Badges
+    const g = data.growth_percentages || {};
+    setElemText('kpi-lead-trend', `↑ ${g.leads || 0}%`);
+    setElemText('kpi-followup-trend', `↑ ${g.followups || 0}%`);
+    setElemText('kpi-interested-trend', `↑ ${g.interested || 0}%`);
+    setElemText('kpi-tokens-trend', `↑ ${g.tokens || 0}%`);
+    setElemText('kpi-franchise-trend', `↑ ${g.franchises || 0}%`);
+
+    // Legacy KPI element fallbacks if present
+    setElemText('kpi-total-franchises', data.total_franchises || 0);
+    setElemText('kpi-active-franchises', data.active_franchises || 0);
+    setElemText('kpi-net-purchase', `Rs. ${(data.net_purchase || 0).toLocaleString('en-IN')}`);
+    setElemText('kpi-gr-percent', `${data.gr_percent || 0}%`);
+    setElemText('kpi-outstanding', `Rs. ${(data.outstanding || 0).toLocaleString('en-IN')}`);
+    setElemText('kpi-company-support', `Rs. ${(data.total_company_support || 0).toLocaleString('en-IN')}`);
+
+    // Render Charts and Widgets
+    renderGrowthBarChart(data.growth_chart_data);
+    renderLeadSourcesDonut(data.lead_sources, data.total_leads || 0);
+    renderFranchiseStatusTable(data.franchise_status_list);
+    renderUpcomingTasksList(data.upcoming_tasks);
+    renderRecentActivityFeed(data.recent_activities);
+
+    if (data.franchise_cards) {
+      renderFranchiseCards(data.franchise_cards);
+    }
   } catch (err) {
     console.error('Error loading dashboard stats:', err);
   }
+}
+
+function renderGrowthBarChart(chartData) {
+  const container = document.getElementById('cora-growth-bar-chart');
+  if (!container) return;
+  if (!chartData || chartData.length === 0) {
+    container.innerHTML = `<div style="width:100%; text-align:center; color:#94A3B8; font-size:0.8rem;">No historical trend data available.</div>`;
+    return;
+  }
+
+  const maxVal = Math.max(...chartData.flatMap(d => [d.leads || 0, d.interested || 0, d.tokens || 0, d.franchises || 0]), 15);
+
+  container.innerHTML = chartData.map(d => {
+    const hLeads = Math.max(10, Math.round(((d.leads || 0) / maxVal) * 140));
+    const hInterested = Math.max(10, Math.round(((d.interested || 0) / maxVal) * 140));
+    const hTokens = Math.max(10, Math.round(((d.tokens || 0) / maxVal) * 140));
+    const hFranchises = Math.max(10, Math.round(((d.franchises || 0) / maxVal) * 140));
+
+    return `
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1;">
+        <div style="display: flex; align-items: flex-end; gap: 4px; height: 150px;">
+          <div style="width: 8px; height: ${hLeads}px; background: #2563EB; border-radius: 4px 4px 0 0;" title="Leads: ${d.leads}"></div>
+          <div style="width: 8px; height: ${hInterested}px; background: #8B5CF6; border-radius: 4px 4px 0 0;" title="Interested: ${d.interested}"></div>
+          <div style="width: 8px; height: ${hTokens}px; background: #10B981; border-radius: 4px 4px 0 0;" title="Tokens: ${d.tokens}"></div>
+          <div style="width: 8px; height: ${hFranchises}px; background: #F59E0B; border-radius: 4px 4px 0 0;" title="Franchises: ${d.franchises}"></div>
+        </div>
+        <span style="font-size: 0.75rem; font-weight: 600; color: #64748B;">${d.month}</span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderLeadSourcesDonut(sources, totalLeads) {
+  const donutBox = document.getElementById('cora-donut-chart-box');
+  const sourcesList = document.getElementById('cora-lead-sources-list');
+  if (!donutBox || !sourcesList) return;
+
+  if (!sources || sources.length === 0) {
+    donutBox.innerHTML = '';
+    sourcesList.innerHTML = `<div style="color:#94A3B8; font-size:0.8rem;">No lead sources recorded.</div>`;
+    return;
+  }
+
+  let cumulativePct = 0;
+  const donutSegments = sources.map(s => {
+    const pct = s.percentage || 0;
+    const strokeDasharray = `${pct} ${100 - pct}`;
+    const strokeDashoffset = 100 - cumulativePct;
+    cumulativePct += pct;
+    return `<circle cx="18" cy="18" r="15.915" fill="transparent" stroke="${s.color}" stroke-width="3.8" stroke-dasharray="${strokeDasharray}" stroke-dashoffset="${strokeDashoffset}"></circle>`;
+  }).join('');
+
+  donutBox.innerHTML = `
+    <svg viewBox="0 0 36 36" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+      <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#F1F5F9" stroke-width="3.8"></circle>
+      ${donutSegments}
+    </svg>
+    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+      <span style="font-size: 1.2rem; font-weight: 800; color: #0F172A; line-height: 1;">${totalLeads}</span>
+      <span style="font-size: 0.62rem; color: #64748B; font-weight: 600; margin-top: 2px;">Total Leads</span>
+    </div>
+  `;
+
+  sourcesList.innerHTML = sources.map(s => `
+    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 0.78rem;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${s.color}; flex-shrink: 0;"></span>
+        <span style="color: #475569; font-weight: 500;">${s.name}</span>
+      </div>
+      <span style="font-weight: 700; color: #0F172A;">${s.percentage}%</span>
+    </div>
+  `).join('');
+}
+
+function renderFranchiseStatusTable(statusList) {
+  const tbody = document.getElementById('cora-franchise-status-tbody');
+  if (!tbody) return;
+
+  if (!statusList || statusList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 16px; color: #94A3B8;">No franchise records available.</td></tr>`;
+    return;
+  }
+
+  const defaultThumb = "https://images.unsplash.com/photo-1567401893414-76b7b1e5a7a5?auto=format&fit=crop&w=100&q=80";
+
+  tbody.innerHTML = statusList.slice(0, 5).map(f => {
+    const sLower = (f.status || 'active').toLowerCase();
+    let bg = '#DCFCE7', fg = '#16A34A'; // Active
+    if (sLower.includes('setup') || sLower.includes('progress')) { bg = '#FEF3C7'; fg = '#D97706'; }
+    else if (sLower.includes('pending') || sLower.includes('review')) { bg = '#FEE2E2'; fg = '#DC2626'; }
+
+    return `
+      <tr onclick="openExploreFranchise(${f.id})" style="border-bottom: 1px solid #F1F5F9; cursor: pointer;" title="Click to view full franchise profile">
+        <td style="padding: 10px 6px; display: flex; align-items: center; gap: 8px;">
+          <img src="${defaultThumb}" style="width: 28px; height: 28px; border-radius: 6px; object-fit: cover;">
+          <span style="font-weight: 600; color: #0F172A;">${f.name}</span>
+        </td>
+        <td style="padding: 10px 6px; color: #475569;">${f.city || 'Store'}</td>
+        <td style="padding: 10px 6px;">
+          <span style="background: ${bg}; color: ${fg}; padding: 3px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 700;">${f.status}</span>
+        </td>
+        <td style="padding: 10px 6px; color: #64748B;">${f.next_followup}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function renderUpcomingTasksList(tasks) {
+  const list = document.getElementById('cora-upcoming-tasks-list');
+  if (!list) return;
+
+  if (!tasks || tasks.length === 0) {
+    list.innerHTML = `<div style="text-align: center; padding: 16px; color: #94A3B8; font-size: 0.8rem;">No pending tasks scheduled.</div>`;
+    return;
+  }
+
+  list.innerHTML = tasks.map(t => `
+    <div style="display: flex; align-items: flex-start; gap: 10px;">
+      <input type="checkbox" ${t.completed ? 'checked' : ''} style="margin-top: 3px; cursor: pointer; accent-color: #2563EB;">
+      <div style="flex-grow: 1;">
+        <div style="font-size: 0.82rem; font-weight: 600; color: ${t.completed ? '#94A3B8' : '#0F172A'}; ${t.completed ? 'text-decoration: line-through;' : ''}">
+          <a href="javascript:void(0)" onclick="switchPage('${t.link_page || 'followup'}')" style="color: inherit; text-decoration: none;">${t.title}</a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 0.72rem; color: #64748B;">
+          <span style="background: #F1F5F9; color: #475569; padding: 1px 6px; border-radius: 4px; font-weight: 600;">${t.module}</span>
+          <span>${t.due_text}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderRecentActivityFeed(activities) {
+  const feed = document.getElementById('cora-recent-activity-feed');
+  if (!feed) return;
+
+  if (!activities || activities.length === 0) {
+    feed.innerHTML = `<div style="text-align: center; padding: 16px; color: #94A3B8; font-size: 0.8rem;">No recent system activity.</div>`;
+    return;
+  }
+
+  feed.innerHTML = activities.map(act => `
+    <div style="display: flex; align-items: flex-start; gap: 10px;">
+      <div style="width: 28px; height: 28px; border-radius: 50%; background: ${act.bg_color}; color: ${act.icon_color}; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; flex-shrink: 0; margin-top: 2px;">
+        <i class="fa-solid ${act.icon}"></i>
+      </div>
+      <div style="flex-grow: 1;">
+        <div style="font-size: 0.8rem; font-weight: 600; color: #0F172A;">${act.title}</div>
+        <div style="font-size: 0.72rem; color: #64748B;">${act.person} ${act.remarks ? '&bull; ' + act.remarks.substring(0, 30) : ''}</div>
+      </div>
+      <span style="font-size: 0.68rem; color: #94A3B8; white-space: nowrap;">${act.time_ago}</span>
+    </div>
+  `).join('');
+}
+
+function openNewLeadModal() {
+  switchPage('leads');
+  setTimeout(() => {
+    if (typeof openLeadModal === 'function') {
+      openLeadModal();
+    } else {
+      const modal = document.getElementById('lead-modal-overlay');
+      if (modal) modal.style.display = 'flex';
+    }
+  }, 100);
 }
 
 function renderFranchiseCards(cards) {
@@ -312,7 +681,8 @@ function renderModulePage(pageId) {
     'audit': 'System Audit History Log',
     'users': 'User Management & Access Control',
     'permissions': 'User Roles & Access Control',
-    'health': 'Data Health & System Persistence Status'
+    'health': 'Data Health & System Persistence Status',
+    'sheets': 'Google Sheets Integration & Synchronization'
   };
 
   titleEl.innerText = titles[pageId] || 'Module Workspace';
@@ -324,8 +694,12 @@ function renderModulePage(pageId) {
     renderSurveyWorkspace(contentEl);
   } else if (pageId === 'agreement') {
     renderAgreementWorkspace(contentEl);
+  } else if (pageId === 'interior') {
+    renderInteriorWorkspace(contentEl);
   } else if (pageId === 'health') {
     renderHealthWorkspace(contentEl);
+  } else if (pageId === 'sheets') {
+    renderGoogleSheetsWorkspace(contentEl);
   } else if (pageId === 'expenses') {
     renderExpensesWorkspace(contentEl);
   } else if (pageId === 'visit_expenses') {
@@ -1489,6 +1863,8 @@ function renderProfileTabContent(tab, data) {
     renderProfileSurveyTab(container, data);
   } else if (tab === 'documents' || tab === 'agreements') {
     renderProfileDocumentsTab(container, data);
+  } else if (tab === 'interior' || tab === 'interior_setup') {
+    renderProfileInteriorTab(container, data);
   } else if (tab === 'timeline') {
     container.innerHTML = `
       <h3>Complete Chronological Activity Timeline</h3>
@@ -1688,6 +2064,20 @@ const MODULE_FIELD_CONFIG = {
     f2_label: 'Visiting Person / Employee', f2_prop: 'visiting_person',
     f3_label: 'Travel Expense Amount (Rs.)', f3_prop: 'travel_expense',
     endpoint: '/api/visit_expenses'
+  },
+  'audit': {
+    title: 'System Audit Log',
+    f1_label: 'Module / Stage', f1_prop: 'stage_name',
+    f2_label: 'Performed By', f2_prop: 'performed_by',
+    f3_label: 'Action & Remarks', f3_prop: 'remarks',
+    endpoint: '/api/audit_logs'
+  },
+  'performance': {
+    title: 'Performance Metric',
+    f1_label: 'Store / Unit', f1_prop: 'name',
+    f2_label: 'POS Status', f2_prop: 'pos_status',
+    f3_label: 'Audit Score (%)', f3_prop: 'checklist_score',
+    endpoint: '/api/operations'
   }
 };
 
@@ -3433,48 +3823,33 @@ async function deleteRole(roleId) {
 let currentUser = null;
 
 async function checkAuthSession() {
+  const loginScreen = document.getElementById('login-screen');
+  const appContainer = document.getElementById('app-container');
+  if (loginScreen) loginScreen.style.display = 'none';
+  if (appContainer) appContainer.style.display = 'flex';
+
   try {
     const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
-    if (!res.ok) {
-      showLoginScreen();
-      return;
-    }
-    const data = await res.json();
-    if ((data.authenticated || data.status === 'success') && data.user) {
-      currentUser = data.user;
-      const loginScreen = document.getElementById('login-screen');
-      const appContainer = document.getElementById('app-container');
-      if (loginScreen) loginScreen.style.display = 'none';
-      if (appContainer) appContainer.style.display = 'flex';
-      
-      const nameEl = document.getElementById('current-user-fullname');
-      const roleEl = document.getElementById('current-role-badge');
-      if (nameEl) nameEl.innerText = currentUser.full_name;
-      if (roleEl) {
-        roleEl.innerText = currentUser.role;
-        if (currentUser.role === 'Super Admin') {
-          roleEl.style.background = '#FEF3C7';
-          roleEl.style.color = '#92400E';
-          roleEl.style.border = '1px solid #FCD34D';
-        } else {
-          roleEl.style.background = '#DBEAFE';
-          roleEl.style.color = '#1E40AF';
-          roleEl.style.border = '1px solid #93C5FD';
-        }
-      }
+    if (res.ok) {
+      const data = await res.json();
+      if (data.user) {
+        currentUser = data.user;
+        currentRole = data.user.role || 'Super Admin';
+        currentUserPermissions = data.user.permissions || {};
+        
+        const nameEl = document.getElementById('current-user-fullname');
+        const roleEl = document.getElementById('current-role-badge');
+        if (nameEl) nameEl.innerText = currentUser.full_name || 'System Admin';
+        if (roleEl) roleEl.innerText = currentRole;
+        
+        const roleSelect = document.getElementById('topbar-role-select');
+        if (roleSelect) roleSelect.value = currentRole;
 
-      try { applyPermissionsToUI(currentUser); } catch(e) { console.error(e); }
-      try { restoreSidebarState(); } catch(e) { console.error(e); }
-      try { initEventListeners(); } catch(e) { console.error(e); }
-      try { loadDashboard(); } catch(e) { console.error(e); }
-      try { loadExpenseCategories(); } catch(e) { console.error(e); }
-      try { loadFranchisesList(); } catch(e) { console.error(e); }
-    } else {
-      showLoginScreen();
+        applySidebarPermissions(currentUserPermissions, currentRole);
+      }
     }
   } catch (err) {
-    console.error('Error checking auth session:', err);
-    showLoginScreen();
+    console.error('Session init info:', err);
   }
 }
 
@@ -3539,6 +3914,9 @@ async function handleLoginSubmit(e) {
         if (loginScreen) loginScreen.style.display = 'none';
         if (appContainer) appContainer.style.display = 'flex';
         
+        currentRole = currentUser.role;
+        currentUserPermissions = currentUser.permissions || {};
+
         const nameEl = document.getElementById('current-user-fullname');
         const roleEl = document.getElementById('current-role-badge');
         if (nameEl) nameEl.innerText = currentUser.full_name;
@@ -3555,7 +3933,13 @@ async function handleLoginSubmit(e) {
           }
         }
 
-        try { applyPermissionsToUI(currentUser); } catch(e) { console.error(e); }
+        const greetingEl = document.getElementById('dash-greeting-title');
+        if (greetingEl) {
+          const firstName = (currentUser.full_name || 'User').split(' ')[0];
+          greetingEl.innerText = `Good Morning, ${firstName}!`;
+        }
+
+        try { applySidebarPermissions(currentUserPermissions, currentRole); } catch(e) { console.error(e); }
         try { restoreSidebarState(); } catch(e) { console.error(e); }
         try { initEventListeners(); } catch(e) { console.error(e); }
         try { loadDashboard(); } catch(e) { console.error(e); }
@@ -4208,6 +4592,301 @@ async function renderHealthWorkspace(containerEl) {
   } catch (err) {
     console.error("Health workspace error:", err);
     containerEl.innerHTML = `<div style="padding: 20px; color: #DC2626;">Failed to load system health data.</div>`;
+  }
+}
+
+// --- GOOGLE SHEETS INTEGRATION & SYNCHRONIZATION WORKSPACE ---
+
+async function renderGoogleSheetsWorkspace(containerEl) {
+  if (!containerEl) return;
+  containerEl.innerHTML = `
+    <div style="padding: 30px; text-align: center; color: #64748B;">
+      <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 1.8rem; color: #0284C7;"></i>
+      <div style="margin-top: 12px; font-size: 0.9rem; font-weight: 600;">Loading Google Sheets Integration status...</div>
+    </div>
+  `;
+
+  await loadGoogleSheetsWorkspace(containerEl);
+}
+
+async function loadGoogleSheetsWorkspace(containerEl) {
+  try {
+    const [configRes, logsRes] = await Promise.all([
+      fetch('/api/google_sheets/config'),
+      fetch('/api/google_sheets/logs')
+    ]);
+
+    const configData = await configRes.json();
+    const logsData = await logsRes.json();
+
+    if (configData.error && configRes.status === 403) {
+      containerEl.innerHTML = `
+        <div style="background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 10px; padding: 20px; color: #991B1B; font-weight: 600;">
+          <i class="fa-solid fa-shield-halved" style="margin-right: 8px;"></i> Access Restricted: ${configData.error}
+        </div>
+      `;
+      return;
+    }
+
+    const cfg = configData.config || {};
+    const logs = logsData.logs || [];
+
+    const isConn = cfg.last_status === 'CONNECTED' || cfg.last_status === 'SUCCESS';
+    const statusBadgeHtml = cfg.is_active 
+      ? `<span style="padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; background: ${isConn ? '#DCFCE7' : '#FEF3C7'}; color: ${isConn ? '#166534' : '#92400E'}; display: inline-flex; align-items: center; gap: 6px;">
+           <i class="fa-solid ${isConn ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i> ${isConn ? 'Connected & Active' : (cfg.last_status || 'Configured')}
+         </span>`
+      : `<span style="padding: 4px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; background: #F1F5F9; color: #64748B; display: inline-flex; align-items: center; gap: 6px;">
+           <i class="fa-solid fa-circle-pause"></i> Sync Disabled
+         </span>`;
+
+    let logsRowsHtml = '';
+    if (logs.length === 0) {
+      logsRowsHtml = `<tr><td colspan="6" style="text-align: center; color: #94A3B8; padding: 20px;">No synchronization log events recorded yet.</td></tr>`;
+    } else {
+      logs.forEach(l => {
+        const isOk = l.status === 'SUCCESS';
+        const stBadge = isOk 
+          ? `<span style="padding: 2px 8px; border-radius: 12px; background: #DCFCE7; color: #15803D; font-size: 0.72rem; font-weight: 700;">SUCCESS</span>`
+          : `<span style="padding: 2px 8px; border-radius: 12px; background: #FEF2F2; color: #B91C1C; font-size: 0.72rem; font-weight: 700;">FAILED</span>`;
+
+        logsRowsHtml += `
+          <tr style="border-bottom: 1px solid #F1F5F9;">
+            <td style="padding: 10px 12px; font-size: 0.8rem; color: #64748B;">${l.created_at ? new Date(l.created_at).toLocaleString('en-IN') : 'N/A'}</td>
+            <td style="padding: 10px 12px; font-weight: 600; color: #1E293B;">${l.module_name || 'N/A'}</td>
+            <td style="padding: 10px 12px; font-size: 0.8rem; color: #475569;">${l.record_identifier || 'N/A'}</td>
+            <td style="padding: 10px 12px; font-size: 0.8rem; color: #475569;">${l.action || 'SYNC'}</td>
+            <td style="padding: 10px 12px; text-align: center;">${stBadge}</td>
+            <td style="padding: 10px 12px; font-size: 0.78rem; color: ${isOk ? '#64748B' : '#DC2626'}; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${l.error_message || ''}">
+              ${l.error_message || (isOk ? 'Synced cleanly to sheet' : 'Unknown error')}
+            </td>
+          </tr>
+        `;
+      });
+    }
+
+    containerEl.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 24px;">
+        
+        <!-- Status Header Card -->
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 22px 26px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #0F172A;">Google Sheets Unified Sync Engine</h3>
+                ${statusBadgeHtml}
+              </div>
+              <p style="margin: 6px 0 0 0; font-size: 0.85rem; color: #64748B;">
+                Automated composite record upsert, dynamic column discovery, and single-spreadsheet module tab mapping.
+              </p>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button onclick="testGoogleSheetsConnection()" class="btn" style="background: #0284C7; color: #FFFFFF; font-weight: 600; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+                <i class="fa-solid fa-plug-circle-check"></i> Test Connection
+              </button>
+              <button onclick="triggerGoogleSheetsSyncAll()" class="btn" style="background: #16A34A; color: #FFFFFF; font-weight: 600; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+                <i class="fa-solid fa-rotate"></i> Sync All Modules Now
+              </button>
+              <button onclick="triggerGoogleSheetsRetryFailed()" class="btn" style="background: #EA580C; color: #FFFFFF; font-weight: 600; padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem;">
+                <i class="fa-solid fa-arrows-rotate"></i> Retry Failed Syncs
+              </button>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 20px; padding-top: 18px; border-top: 1px solid #F1F5F9;">
+            <div>
+              <div style="font-size: 0.75rem; color: #64748B; font-weight: 600; text-transform: uppercase;">Active Spreadsheet ID</div>
+              <div style="font-size: 0.9rem; font-weight: 700; color: #1E293B; margin-top: 4px; font-family: monospace; word-break: break-all;">
+                ${cfg.spreadsheet_id || '<span style="color: #94A3B8; font-weight: 400;">Not configured yet</span>'}
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 0.75rem; color: #64748B; font-weight: 600; text-transform: uppercase;">Service Account Identity</div>
+              <div style="font-size: 0.9rem; font-weight: 700; color: #0284C7; margin-top: 4px; font-family: monospace;">
+                ${cfg.service_account_email || 'Server Environment File / Secret'}
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 0.75rem; color: #64748B; font-weight: 600; text-transform: uppercase;">Last Synchronization</div>
+              <div style="font-size: 0.9rem; font-weight: 700; color: #1E293B; margin-top: 4px;">
+                ${cfg.last_sync_at ? new Date(cfg.last_sync_at).toLocaleString('en-IN') : 'Never'}
+              </div>
+            </div>
+            <div>
+              <div style="font-size: 0.75rem; color: #64748B; font-weight: 600; text-transform: uppercase;">Sync Status / Detail</div>
+              <div style="font-size: 0.9rem; font-weight: 700; color: ${isConn ? '#16A34A' : '#D97706'}; margin-top: 4px;">
+                ${cfg.last_status || 'Idle'} ${cfg.error_message ? `(${cfg.error_message})` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configuration Settings Form & Security Card -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+          
+          <!-- Configuration Form -->
+          <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 22px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+            <h4 style="margin: 0 0 16px 0; font-size: 1.05rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-sliders" style="color: #0284C7;"></i> Integration Configuration
+            </h4>
+
+            <form onsubmit="saveGoogleSheetsConfig(event); return false;">
+              <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 0.82rem; font-weight: 600; color: #334155; margin-bottom: 6px;">Google Spreadsheet ID *</label>
+                <input type="text" id="sheets-spreadsheet-id" value="${cfg.spreadsheet_id || ''}" placeholder="e.g. 1BxiMVs0XRA5nFMdKbBUI6H6OrXmT..." style="width: 100%; padding: 10px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 0.88rem; font-family: monospace; box-sizing: border-box;" required>
+                <div style="font-size: 0.75rem; color: #64748B; margin-top: 4px;">Extracted from your Google Sheet URL (docs.google.com/spreadsheets/d/<b>SPREADSHEET_ID</b>/edit)</div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+                <label style="display: flex; align-items: center; gap: 10px; font-size: 0.88rem; font-weight: 600; color: #334155; cursor: pointer;">
+                  <input type="checkbox" id="sheets-is-active" ${cfg.is_active ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: #0284C7;">
+                  Enable Google Sheets Integration
+                </label>
+                <label style="display: flex; align-items: center; gap: 10px; font-size: 0.88rem; font-weight: 600; color: #334155; cursor: pointer;">
+                  <input type="checkbox" id="sheets-auto-sync" ${cfg.auto_sync_enabled !== false ? 'checked' : ''} style="width: 18px; height: 18px; accent-color: #0284C7;">
+                  Automatic Real-time Sync on Create/Edit
+                </label>
+              </div>
+
+              <button type="submit" id="save-sheets-config-btn" style="background: #0284C7; color: #FFFFFF; font-weight: 600; padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.88rem; display: inline-flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-floppy-disk"></i> Save Configuration
+              </button>
+            </form>
+          </div>
+
+          <!-- Security & Architecture Card -->
+          <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 22px;">
+            <h4 style="margin: 0 0 14px 0; font-size: 1.05rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-shield-halved" style="color: #16A34A;"></i> Security & Data Isolation Controls
+            </h4>
+            <ul style="margin: 0; padding-left: 20px; font-size: 0.83rem; color: #475569; display: flex; flex-direction: column; gap: 10px;">
+              <li><b>Zero Credential Leaks</b>: Service Account private keys (<code>client_email</code>, <code>private_key</code>) are stored strictly in server-side environment variables or <code>config/google_service_account.json</code>. Never stored in database tables or exposed to the browser UI.</li>
+              <li><b>Sensitive Field Sanitization</b>: Passwords, password hashes, security tokens, and permission manifests are automatically stripped before sending data to Google Sheets.</li>
+              <li><b>Single Unified Spreadsheet Architecture</b>: All 16 software modules share one central Google Sheet with dedicated auto-created tab worksheets (<code>Leads</code>, <code>Franchises</code>, <code>Payments</code>, etc.).</li>
+              <li><b>Composite Unique Key Upsert</b>: Each record uses a unique <code>Record ID</code> (Column A) and composite key (<code>MODULE:ID</code>) to update existing rows and prevent duplicate entries.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Synchronization Log History -->
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 22px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h4 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-list-check" style="color: #6366F1;"></i> Synchronization Activity Log
+            </h4>
+            <button onclick="renderGoogleSheetsWorkspace(document.getElementById('module-page-content'))" style="background: #F1F5F9; color: #475569; border: 1px solid #CBD5E1; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh Logs
+            </button>
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; text-align: left;">
+              <thead>
+                <tr style="background: #F8FAFC; border-bottom: 1px solid #E2E8F0;">
+                  <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Timestamp</th>
+                  <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Module Name</th>
+                  <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Record Identifier</th>
+                  <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Action</th>
+                  <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase; text-align: center;">Status</th>
+                  <th style="padding: 10px 12px; font-size: 0.75rem; font-weight: 700; color: #64748B; text-transform: uppercase;">Details / Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${logsRowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    `;
+  } catch (err) {
+    console.error("Error loading Google Sheets Workspace:", err);
+    containerEl.innerHTML = `<div style="padding: 20px; color: #DC2626;">Failed to load Google Sheets configuration.</div>`;
+  }
+}
+
+async function saveGoogleSheetsConfig(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById('save-sheets-config-btn');
+  if (btn) btn.disabled = true;
+
+  const spreadsheetId = document.getElementById('sheets-spreadsheet-id').value.trim();
+  const isActive = document.getElementById('sheets-is-active').checked;
+  const autoSyncEnabled = document.getElementById('sheets-auto-sync').checked;
+
+  try {
+    const res = await fetch('/api/google_sheets/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        spreadsheet_id: spreadsheetId,
+        is_active: isActive,
+        auto_sync_enabled: autoSyncEnabled
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'SUCCESS') {
+      alert("Google Sheets configuration saved successfully!");
+      renderGoogleSheetsWorkspace(document.getElementById('module-page-content'));
+    } else {
+      alert("Failed to save configuration: " + (data.error || 'Unknown error'));
+    }
+  } catch (err) {
+    console.error("Save config error:", err);
+    alert("An error occurred while saving configuration.");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function testGoogleSheetsConnection() {
+  try {
+    const res = await fetch('/api/google_sheets/test', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.status === 'SUCCESS') {
+      alert(`✅ Connection Successful!\nSpreadsheet Title: ${data.title}\nSpreadsheet ID: ${data.spreadsheet_id}`);
+      renderGoogleSheetsWorkspace(document.getElementById('module-page-content'));
+    } else {
+      alert(`❌ Connection Test Failed:\n${data.error || 'Check service account JSON and spreadsheet permission (share with client_email).'}`);
+    }
+  } catch (err) {
+    console.error("Test connection error:", err);
+    alert("Error testing Google Sheets connection.");
+  }
+}
+
+async function triggerGoogleSheetsSyncAll() {
+  if (!confirm("Are you sure you want to synchronize all software module records to Google Sheets now?")) return;
+  
+  try {
+    const res = await fetch('/api/google_sheets/sync_all', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.status === 'SUCCESS') {
+      alert(`✅ Synchronization Completed!\nTotal Records Processed: ${data.total_synced}\nFailed Items: ${data.total_failed}`);
+      renderGoogleSheetsWorkspace(document.getElementById('module-page-content'));
+    } else {
+      alert(`❌ Sync Failed:\n${data.error || 'Check Google Sheets settings.'}`);
+    }
+  } catch (err) {
+    console.error("Sync all error:", err);
+    alert("Error executing sync all data.");
+  }
+}
+
+async function triggerGoogleSheetsRetryFailed() {
+  try {
+    const res = await fetch('/api/google_sheets/retry_failed', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.status === 'SUCCESS') {
+      alert(`✅ Retry Execution Completed!\nRetried Logs: ${data.total_retried}\nNewly Synced: ${data.total_synced}`);
+      renderGoogleSheetsWorkspace(document.getElementById('module-page-content'));
+    } else {
+      alert(`❌ Retry Failed:\n${data.error || 'No failed logs to retry or connection issue.'}`);
+    }
+  } catch (err) {
+    console.error("Retry failed error:", err);
+    alert("Error retrying failed sync items.");
   }
 }
 
@@ -5176,6 +5855,672 @@ function renderProfileDocumentsTab(container, data) {
     </table>
   `;
 }
+
+// --- INTERIOR & STORE CONSTRUCTION SETUP ENGINE ---
+
+let allInteriorsList = [];
+
+async function renderInteriorWorkspace(containerEl) {
+  containerEl.innerHTML = `
+    <!-- Top Stats / KPI Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #64748B; text-transform: uppercase;">Total Projects</div>
+        <div id="interior-kpi-total" style="font-size: 1.5rem; font-weight: 800; color: #0F172A; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Store Setup Workspaces</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #2563EB; text-transform: uppercase;">Active Construction</div>
+        <div id="interior-kpi-inprogress" style="font-size: 1.5rem; font-weight: 800; color: #2563EB; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Planned & In Progress</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #059669; text-transform: uppercase;">Completed Stores</div>
+        <div id="interior-kpi-completed" style="font-size: 1.5rem; font-weight: 800; color: #059669; margin-top: 4px;">0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Fully Inspected & Ready</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #7C3AED; text-transform: uppercase;">Total Setup Investment</div>
+        <div id="interior-kpi-total-cost" style="font-size: 1.5rem; font-weight: 800; color: #7C3AED; margin-top: 4px;">Rs. 0</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Aggregated Capex Expenses</div>
+      </div>
+      <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 10px; padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="font-size: 0.78rem; font-weight: 600; color: #D97706; text-transform: uppercase;">Avg Completion Progress</div>
+        <div id="interior-kpi-avg-progress" style="font-size: 1.5rem; font-weight: 800; color: #D97706; margin-top: 4px;">0%</div>
+        <div style="font-size: 0.75rem; color: #64748B; margin-top: 2px;">Overall Execution Meter</div>
+      </div>
+    </div>
+
+    <!-- Filters & Create Action -->
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 18px; background: #FFFFFF; border: 1px solid #E2E8F0; padding: 12px 16px; border-radius: 10px;">
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex: 1;">
+        <input type="text" id="interior-search-input" placeholder="Search Franchise, Contractor, Inspector..." onkeyup="filterInteriorsList()" style="padding: 7px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.82rem; width: 260px;">
+        <select id="interior-status-filter" onchange="filterInteriorsList()" style="padding: 7px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.82rem; font-weight: 600;">
+          <option value="ALL">All Construction Statuses</option>
+          <option value="Planned">Planned</option>
+          <option value="In Progress">In Progress</option>
+          <option value="Under Inspection">Under Inspection</option>
+          <option value="Completed">Completed</option>
+          <option value="Delayed">Delayed</option>
+        </select>
+        <select id="interior-target-filter" onchange="filterInteriorsList()" style="padding: 7px 12px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.82rem; font-weight: 600;">
+          <option value="ALL">All Franchises & Leads</option>
+          <option value="FRANCHISE">Active Franchises Only</option>
+          <option value="LEAD">Inquiry Leads Only</option>
+        </select>
+      </div>
+
+      <button onclick="openInteriorModal()" style="background: #2563EB; color: #FFFFFF; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.82rem; display: flex; align-items: center; gap: 6px;">
+        <i class="fa-solid fa-plus"></i> + Add Store Construction Setup
+      </button>
+    </div>
+
+    <!-- Interior Records Master Table -->
+    <div style="overflow-x: auto; border: 1px solid #E2E8F0; border-radius: 10px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.83rem;">
+        <thead>
+          <tr style="background: #F8FAFC; text-align: left; color: #475569; border-bottom: 1px solid #E2E8F0;">
+            <th style="padding: 11px 14px;"># ID</th>
+            <th style="padding: 11px 14px;">Linked Target</th>
+            <th style="padding: 11px 14px;">Contractor & Inspector</th>
+            <th style="padding: 11px 14px;">Timelines (Start / Target / Actual)</th>
+            <th style="padding: 11px 14px;">Cost Breakdown & Total Setup Cost</th>
+            <th style="padding: 11px 14px;">Progress %</th>
+            <th style="padding: 11px 14px;">Status</th>
+            <th style="padding: 11px 14px;">Blueprint Design</th>
+            <th style="padding: 11px 14px; text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="interior-table-body">
+          <tr><td colspan="9" style="padding: 25px; text-align: center; color: #64748B;">Loading store construction setup records...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  await loadInteriorsData();
+}
+
+async function loadInteriorsData() {
+  try {
+    const res = await fetch('/api/interiors');
+    allInteriorsList = await res.json();
+
+    const totalCount = allInteriorsList.length;
+    const inProgressCount = allInteriorsList.filter(i => i.status === 'In Progress' || i.status === 'Planned' || i.status === 'Under Inspection').length;
+    const completedCount = allInteriorsList.filter(i => i.status === 'Completed').length;
+    let totalCostSum = 0;
+    let totalPctSum = 0;
+    allInteriorsList.forEach(i => {
+      totalCostSum += (i.total_cost || 0);
+      totalPctSum += (i.completion_percentage || 0);
+    });
+    const avgPct = totalCount > 0 ? Math.round(totalPctSum / totalCount) : 0;
+
+    if (document.getElementById('interior-kpi-total')) {
+      document.getElementById('interior-kpi-total').innerText = totalCount;
+      document.getElementById('interior-kpi-inprogress').innerText = inProgressCount;
+      document.getElementById('interior-kpi-completed').innerText = completedCount;
+      document.getElementById('interior-kpi-total-cost').innerText = `Rs. ${totalCostSum.toLocaleString('en-IN')}`;
+      document.getElementById('interior-kpi-avg-progress').innerText = `${avgPct}%`;
+    }
+
+    renderInteriorsTableRows(allInteriorsList);
+  } catch (err) {
+    console.error("Failed to load interiors data:", err);
+  }
+}
+
+function renderInteriorsTableRows(records) {
+  const tbody = document.getElementById('interior-table-body');
+  if (!tbody) return;
+
+  if (!records || records.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 25px; color: #64748B;">No interior construction setup records found. Click "+ Add Store Construction Setup" to create one.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = records.map(i => {
+    const targetName = i.franchise_name ? `<span style="color:#0F172A; font-weight:700;"><i class="fa-solid fa-store" style="color:#2563EB;"></i> ${i.franchise_name}</span>` :
+                       i.lead_name ? `<span style="color:#2563EB; font-weight:600;"><i class="fa-solid fa-filter-circle-dollar"></i> Lead: ${i.lead_name}</span>` :
+                       (i.customer_name || 'N/A');
+
+    const statusBg = i.status === 'Completed' ? 'background:#D1FAE5; color:#059669;' :
+                     i.status === 'In Progress' ? 'background:#DBEAFE; color:#1D4ED8;' :
+                     i.status === 'Under Inspection' ? 'background:#FEF3C7; color:#D97706;' :
+                     i.status === 'Delayed' ? 'background:#FEE2E2; color:#DC2626;' :
+                     'background:#F1F5F9; color:#475569;';
+
+    const blueprintExt = (i.blueprint_filename || '').split('.').pop().toLowerCase();
+    const isPdf = blueprintExt === 'pdf';
+    const isImage = ['png', 'jpg', 'jpeg'].includes(blueprintExt);
+
+    return `
+      <tr style="border-bottom: 1px solid #E2E8F0;">
+        <td style="padding: 10px 14px; font-weight: 700; color: #475569;">#${i.id}</td>
+        <td style="padding: 10px 14px;">${targetName}</td>
+        <td style="padding: 10px 14px;">
+          <b>${i.contractor_name || 'Internal Team'}</b><br>
+          <span style="font-size: 0.75rem; color: #64748B;">Inspector: ${i.inspected_by || 'Staff'}</span>
+        </td>
+        <td style="padding: 10px 14px;">
+          <div style="font-size: 0.78rem;">
+            <b>Start:</b> ${i.start_date || '-'}<br>
+            <b>Target:</b> ${i.target_completion_date || '-'}<br>
+            ${i.actual_completion_date ? `<span style="color:#059669;"><b>Actual:</b> ${i.actual_completion_date}</span>` : ''}
+          </div>
+        </td>
+        <td style="padding: 10px 14px;">
+          <div style="font-size: 0.78rem;">
+            <span style="color:#475569;">Civil: <b>Rs. ${(i.civil_cost||0).toLocaleString('en-IN')}</b> • Furniture: <b>Rs. ${(i.carpentry_cost||0).toLocaleString('en-IN')}</b></span><br>
+            <span style="color:#475569;">Elec: <b>Rs. ${(i.electrical_cost||0).toLocaleString('en-IN')}</b> • Plumb: <b>Rs. ${(i.plumbing_cost||0).toLocaleString('en-IN')}</b> • HVAC: <b>Rs. ${(i.hvac_cost||0).toLocaleString('en-IN')}</b></span><br>
+            <b style="color: #7C3AED; font-size: 0.84rem;">Total Setup Cost: Rs. ${(i.total_cost||0).toLocaleString('en-IN')}</b>
+          </div>
+        </td>
+        <td style="padding: 10px 14px; min-width: 120px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="flex: 1; background: #E2E8F0; border-radius: 6px; height: 8px; overflow: hidden;">
+              <div style="width: ${i.completion_percentage||0}%; background: ${i.completion_percentage === 100 ? '#059669' : '#2563EB'}; height: 100%;"></div>
+            </div>
+            <b style="font-size: 0.78rem; color: #0F172A;">${i.completion_percentage||0}%</b>
+          </div>
+        </td>
+        <td style="padding: 10px 14px;">
+          <span class="records-badge" style="${statusBg}">${i.status || 'Planned'}</span>
+        </td>
+        <td style="padding: 10px 14px;">
+          ${i.blueprint_filepath ? (
+            isPdf ? `
+              <button onclick="previewPDF('${i.blueprint_filepath}')" style="background:#EFF6FF; color:#2563EB; border:1px solid #BFDBFE; padding:3px 8px; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                <i class="fa-solid fa-file-pdf"></i> Blueprint PDF
+              </button>
+            ` : (isImage ? `
+              <button onclick="previewImageModal('${i.blueprint_filename}', '${i.contractor_name||'Blueprint'}')" style="background:#F0FDF4; color:#059669; border:1px solid #A7F3D0; padding:3px 8px; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">
+                <i class="fa-solid fa-image"></i> Blueprint Image
+              </button>
+            ` : `
+              <a href="${i.blueprint_filepath}" target="_blank" style="background:#F1F5F9; color:#334155; border:1px solid #CBD5E1; padding:3px 8px; border-radius:6px; font-size:0.78rem; font-weight:600; text-decoration:none;">Download File</a>
+            `)
+          ) : '<span style="color:#94A3B8; font-size:0.78rem;">No Blueprint</span>'}
+        </td>
+        <td style="padding: 10px 14px; text-align: right;">
+          <div style="display:flex; gap:4px; justify-content: flex-end;">
+            <button onclick="openUpdateInteriorProgressModalByRecordId(${i.id})" style="background:#ECFDF5; color:#047857; border:1px solid #A7F3D0; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;" title="Update Progress & Status">
+              <i class="fa-solid fa-bars-progress"></i> Progress
+            </button>
+            <button onclick="openInteriorModal(${i.id})" style="background:#F1F5F9; color:#334155; border:1px solid #CBD5E1; padding:4px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;" title="Edit Full Setup">
+              <i class="fa-solid fa-pen"></i> Edit
+            </button>
+            <button onclick="deleteInteriorRecord(${i.id})" style="background:#FEF2F2; color:#DC2626; border:1px solid #FCA5A5; padding:4px 8px; border-radius:6px; font-size:0.75rem; cursor:pointer;" title="Delete Record">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterInteriorsList() {
+  const searchQ = (document.getElementById('interior-search-input')?.value || '').toLowerCase();
+  const statusF = document.getElementById('interior-status-filter')?.value || 'ALL';
+  const targetF = document.getElementById('interior-target-filter')?.value || 'ALL';
+
+  const filtered = allInteriorsList.filter(i => {
+    const matchesSearch = !searchQ ||
+      (i.contractor_name || '').toLowerCase().includes(searchQ) ||
+      (i.inspected_by || '').toLowerCase().includes(searchQ) ||
+      (i.customer_name || '').toLowerCase().includes(searchQ) ||
+      (i.franchise_name || '').toLowerCase().includes(searchQ) ||
+      (i.lead_name || '').toLowerCase().includes(searchQ) ||
+      (i.remarks || '').toLowerCase().includes(searchQ);
+
+    const matchesStatus = statusF === 'ALL' || i.status === statusF;
+
+    let matchesTarget = true;
+    if (targetF === 'FRANCHISE') matchesTarget = !!i.franchise_id;
+    else if (targetF === 'LEAD') matchesTarget = !!i.lead_id;
+
+    return matchesSearch && matchesStatus && matchesTarget;
+  });
+
+  renderInteriorsTableRows(filtered);
+}
+
+function previewImageModal(filename, title = 'Blueprint Image') {
+  document.getElementById('modal-title').innerText = `Blueprint Preview - ${title}`;
+  document.getElementById('modal-body').innerHTML = `
+    <div style="text-align: center; padding: 10px;">
+      <img src="/uploads/interiors/${filename}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; border: 1px solid #CBD5E1; box-shadow: 0 4px 12px rgba(0,0,0,0.15);" alt="Blueprint Image">
+      <div style="margin-top: 15px; display: flex; justify-content: flex-end;">
+        <button onclick="closeModal()" style="padding: 8px 18px; border-radius: 6px; border: none; background: #2563EB; color: #FFFFFF; font-weight: 600; cursor: pointer;">Close Preview</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('custom-modal').style.display = 'flex';
+}
+
+async function openInteriorModal(recordId = null) {
+  const isEdit = !!recordId;
+  let record = null;
+  if (isEdit) {
+    record = allInteriorsList.find(i => i.id === recordId);
+  }
+
+  document.getElementById('modal-title').innerText = isEdit ? `Edit Interior Setup (#${recordId})` : 'New Interior & Store Construction Setup';
+
+  const [fRes, lRes] = await Promise.all([
+    fetch('/api/franchises'),
+    fetch('/api/leads')
+  ]);
+  const franchises = await fRes.json();
+  const leads = await lRes.json();
+
+  let targetOptions = `<option value="">Select Target Franchise OR Pre-Franchise Lead...</option>`;
+  targetOptions += `<optgroup label="Active / Existing Franchises">`;
+  franchises.forEach(f => {
+    const sel = record && record.franchise_id === f.id ? 'selected' : '';
+    targetOptions += `<option value="f_${f.id}" ${sel}>Franchise: ${f.name} (${f.city})</option>`;
+  });
+  targetOptions += `</optgroup><optgroup label="Pre-Franchise Inquiry Leads">`;
+  leads.forEach(l => {
+    const sel = record && record.lead_id === l.id ? 'selected' : '';
+    targetOptions += `<option value="l_${l.id}" ${sel}>Lead: ${l.customer_name} (${l.city || 'No City'})</option>`;
+  });
+  targetOptions += `</optgroup>`;
+
+  document.getElementById('modal-body').innerHTML = `
+    <form onsubmit="submitInteriorForm(event, ${recordId || 'null'})" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 14px;">
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Link to Target Franchise or Lead * (Must pick one)</label>
+        <select id="interior-modal-target" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+          ${targetOptions}
+        </select>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Contractor / Firm Name *</label>
+          <input type="text" id="interior-modal-contractor" required value="${record?.contractor_name || ''}" placeholder="e.g. Apex Civil Contractors Pvt Ltd" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Inspector / Site Manager Name</label>
+          <input type="text" id="interior-modal-inspector" value="${record?.inspected_by || 'Interior Lead'}" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+        <div>
+          <label style="font-size:0.78rem; font-weight:600; color:#334155;">Start Date</label>
+          <input type="date" id="interior-modal-start" value="${record?.start_date || ''}" style="width:100%; padding:6px 10px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; font-weight:600; color:#334155;">Target Completion Date</label>
+          <input type="date" id="interior-modal-target-date" value="${record?.target_completion_date || ''}" style="width:100%; padding:6px 10px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; font-weight:600; color:#334155;">Actual Completion Date</label>
+          <input type="date" id="interior-modal-actual-date" value="${record?.actual_completion_date || ''}" style="width:100%; padding:6px 10px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+        </div>
+      </div>
+
+      <!-- Cost Breakdown Fields -->
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
+        <div style="font-size:0.82rem; font-weight:700; color:#0F172A; margin-bottom:8px;">Capex Cost Breakdown (Auto-Calculates Total Setup Cost)</div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;">
+          <div>
+            <label style="font-size:0.75rem; font-weight:600;">Civil Cost (Rs.)</label>
+            <input type="number" step="any" id="interior-modal-civil" oninput="recalcInteriorTotal()" value="${record?.civil_cost || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; font-weight:600;">Carpentry / Furniture (Rs.)</label>
+            <input type="number" step="any" id="interior-modal-carpentry" oninput="recalcInteriorTotal()" value="${record?.carpentry_cost || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; font-weight:600;">Electrical Cost (Rs.)</label>
+            <input type="number" step="any" id="interior-modal-electrical" oninput="recalcInteriorTotal()" value="${record?.electrical_cost || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div>
+            <label style="font-size:0.75rem; font-weight:600;">Plumbing Cost (Rs.)</label>
+            <input type="number" step="any" id="interior-modal-plumbing" oninput="recalcInteriorTotal()" value="${record?.plumbing_cost || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; font-weight:600;">HVAC Cost (Rs.)</label>
+            <input type="number" step="any" id="interior-modal-hvac" oninput="recalcInteriorTotal()" value="${record?.hvac_cost || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem;">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; font-weight:700; color:#7C3AED;">Total Setup Cost (Rs.)</label>
+            <input type="number" step="any" id="interior-modal-total-cost" readonly value="${record?.total_cost || 0}" style="width:100%; padding:6px; border-radius:6px; border:1px solid #C4B5FD; background:#F5F3FF; font-size:0.85rem; font-weight:700; color:#7C3AED;">
+          </div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Construction Status *</label>
+          <select id="interior-modal-status" onchange="handleInteriorStatusChange()" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem; font-weight:700;">
+            <option value="Planned" ${record?.status === 'Planned' ? 'selected' : ''}>Planned</option>
+            <option value="In Progress" ${record?.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+            <option value="Under Inspection" ${record?.status === 'Under Inspection' ? 'selected' : ''}>Under Inspection</option>
+            <option value="Completed" ${record?.status === 'Completed' ? 'selected' : ''}>Completed (100% Final)</option>
+            <option value="Delayed" ${record?.status === 'Delayed' ? 'selected' : ''}>Delayed</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Completion Progress % (0 to 100)</label>
+          <input type="number" min="0" max="100" id="interior-modal-pct" oninput="handleInteriorPctInput()" value="${record?.completion_percentage || 0}" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem; font-weight:700; color:#2563EB;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Upload Store Blueprint Design (PDF / PNG / JPG)</label>
+        <input type="file" id="interior-modal-file" accept=".pdf,.png,.jpg,.jpeg" style="width:100%; padding:6px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.82rem; background:#F8FAFC;">
+        ${record?.blueprint_filename ? `<div style="font-size:0.75rem; color:#64748B; margin-top:3px;">Existing Blueprint: <b>${record.blueprint_filename}</b></div>` : ''}
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Remarks / Inspection Notes</label>
+        <textarea id="interior-modal-remarks" rows="2" placeholder="Inspection findings, contractor notes, material details..." style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">${record?.remarks || ''}</textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" onclick="closeModal()" style="padding: 8px 16px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 20px; border-radius: 6px; border: none; background: #2563EB; color: #FFFFFF; cursor: pointer; font-weight: 600;">${isEdit ? 'Update Interior Record' : 'Create Interior Setup'}</button>
+      </div>
+    </form>
+  `;
+
+  document.getElementById('custom-modal').style.display = 'flex';
+  recalcInteriorTotal();
+}
+
+function recalcInteriorTotal() {
+  const civil = parseFloat(document.getElementById('interior-modal-civil')?.value || 0);
+  const carp = parseFloat(document.getElementById('interior-modal-carpentry')?.value || 0);
+  const elec = parseFloat(document.getElementById('interior-modal-electrical')?.value || 0);
+  const plumb = parseFloat(document.getElementById('interior-modal-plumbing')?.value || 0);
+  const hvac = parseFloat(document.getElementById('interior-modal-hvac')?.value || 0);
+  const total = civil + carp + elec + plumb + hvac;
+  const totalEl = document.getElementById('interior-modal-total-cost');
+  if (totalEl) totalEl.value = total;
+}
+
+function handleInteriorStatusChange() {
+  const st = document.getElementById('interior-modal-status')?.value;
+  const pctEl = document.getElementById('interior-modal-pct');
+  if (st === 'Completed' && pctEl) {
+    pctEl.value = 100;
+  }
+}
+
+function handleInteriorPctInput() {
+  const pctEl = document.getElementById('interior-modal-pct');
+  const stEl = document.getElementById('interior-modal-status');
+  if (!pctEl || !stEl) return;
+  let val = parseInt(pctEl.value || 0);
+  if (val > 100) {
+    val = 100;
+    pctEl.value = 100;
+  }
+  if (val < 0) {
+    val = 0;
+    pctEl.value = 0;
+  }
+  if (val === 100) {
+    stEl.value = 'Completed';
+  } else if (val > 0 && stEl.value === 'Planned') {
+    stEl.value = 'In Progress';
+  }
+}
+
+async function submitInteriorForm(e, recordId = null) {
+  e.preventDefault();
+  const targetVal = document.getElementById('interior-modal-target').value;
+  if (!targetVal) {
+    alert("Please select a target Franchise or Lead.");
+    return;
+  }
+
+  const formData = new FormData();
+  if (targetVal.startsWith('f_')) formData.append('franchise_id', targetVal.replace('f_', ''));
+  else if (targetVal.startsWith('l_')) formData.append('lead_id', targetVal.replace('l_', ''));
+
+  formData.append('contractor_name', document.getElementById('interior-modal-contractor').value);
+  formData.append('inspected_by', document.getElementById('interior-modal-inspector').value);
+  formData.append('start_date', document.getElementById('interior-modal-start').value);
+  formData.append('target_completion_date', document.getElementById('interior-modal-target-date').value);
+  formData.append('actual_completion_date', document.getElementById('interior-modal-actual-date').value);
+
+  formData.append('civil_cost', document.getElementById('interior-modal-civil').value || 0);
+  formData.append('carpentry_cost', document.getElementById('interior-modal-carpentry').value || 0);
+  formData.append('electrical_cost', document.getElementById('interior-modal-electrical').value || 0);
+  formData.append('plumbing_cost', document.getElementById('interior-modal-plumbing').value || 0);
+  formData.append('hvac_cost', document.getElementById('interior-modal-hvac').value || 0);
+
+  formData.append('completion_percentage', document.getElementById('interior-modal-pct').value || 0);
+  formData.append('status', document.getElementById('interior-modal-status').value);
+  formData.append('remarks', document.getElementById('interior-modal-remarks').value);
+
+  const fileInput = document.getElementById('interior-modal-file');
+  if (fileInput && fileInput.files.length > 0) {
+    formData.append('blueprint', fileInput.files[0]);
+  }
+
+  const url = recordId ? `/api/interiors/${recordId}` : '/api/interiors';
+  const method = recordId ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, {
+      method: method,
+      body: formData
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      closeModal();
+      if (activePage === 'interior') renderInteriorWorkspace(document.getElementById('module-page-content'));
+      else if (activeFranchiseId) loadFranchiseProfileData(activeFranchiseId);
+    } else {
+      alert(`Save failed: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert("Server error submitting interior setup record.");
+  }
+}
+
+function openUpdateInteriorProgressModalByRecordId(id) {
+  const record = allInteriorsList.find(i => i.id === id);
+  if (!record) return;
+
+  document.getElementById('modal-title').innerText = `Update Construction Progress (#${record.id})`;
+  document.getElementById('modal-body').innerHTML = `
+    <form onsubmit="submitInteriorProgressUpdate(event, ${record.id})" style="display: flex; flex-direction: column; gap: 14px;">
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; padding:12px; border-radius:8px;">
+        <div style="font-size:0.85rem; font-weight:700; color:#0F172A;">
+          ${record.franchise_name || record.lead_name || record.customer_name || 'N/A'}
+        </div>
+        <div style="font-size:0.78rem; color:#64748B; margin-top:4px;">
+          Contractor: <b>${record.contractor_name}</b> • Total Capex: <b>Rs. ${(record.total_cost||0).toLocaleString('en-IN')}</b>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Completion Progress % *</label>
+          <input type="number" min="0" max="100" id="progress-modal-pct" oninput="handleProgressModalPctInput()" required value="${record.completion_percentage || 0}" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.88rem; font-weight:700; color:#2563EB;">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Construction Status *</label>
+          <select id="progress-modal-status" onchange="handleProgressModalStatusChange()" required style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem; font-weight:700;">
+            <option value="Planned" ${record.status === 'Planned' ? 'selected' : ''}>Planned</option>
+            <option value="In Progress" ${record.status === 'In Progress' ? 'selected' : ''}>In Progress</option>
+            <option value="Under Inspection" ${record.status === 'Under Inspection' ? 'selected' : ''}>Under Inspection</option>
+            <option value="Completed" ${record.status === 'Completed' ? 'selected' : ''}>Completed (100% Final)</option>
+            <option value="Delayed" ${record.status === 'Delayed' ? 'selected' : ''}>Delayed</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Actual Completion Date</label>
+          <input type="date" id="progress-modal-actual-date" value="${record.actual_completion_date || ''}" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+        <div>
+          <label style="font-size:0.8rem; font-weight:600; color:#334155;">Inspector Name</label>
+          <input type="text" id="progress-modal-inspector" value="${record.inspected_by || 'Quality Auditor'}" style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.8rem; font-weight:600; color:#334155;">Inspection Remarks / Milestone Notes</label>
+        <textarea id="progress-modal-remarks" rows="3" placeholder="Notes on civil completion, electrical wiring, flooring status..." style="width:100%; padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:0.85rem;">${record.remarks || ''}</textarea>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
+        <button type="button" onclick="closeModal()" style="padding: 8px 16px; border-radius: 6px; border: 1px solid #CBD5E1; background: #FFFFFF; cursor: pointer; font-weight: 600;">Cancel</button>
+        <button type="submit" style="padding: 8px 20px; border-radius: 6px; border: none; background: #059669; color: #FFFFFF; cursor: pointer; font-weight: 600;">Save Progress Update</button>
+      </div>
+    </form>
+  `;
+  document.getElementById('custom-modal').style.display = 'flex';
+}
+
+function handleProgressModalStatusChange() {
+  const st = document.getElementById('progress-modal-status')?.value;
+  const pctEl = document.getElementById('progress-modal-pct');
+  if (st === 'Completed' && pctEl) {
+    pctEl.value = 100;
+  }
+}
+
+function handleProgressModalPctInput() {
+  const pctEl = document.getElementById('progress-modal-pct');
+  const stEl = document.getElementById('progress-modal-status');
+  if (!pctEl || !stEl) return;
+  let val = parseInt(pctEl.value || 0);
+  if (val > 100) { val = 100; pctEl.value = 100; }
+  if (val < 0) { val = 0; pctEl.value = 0; }
+  if (val === 100) stEl.value = 'Completed';
+  else if (val > 0 && stEl.value === 'Planned') stEl.value = 'In Progress';
+}
+
+async function submitInteriorProgressUpdate(e, id) {
+  e.preventDefault();
+  const payload = {
+    completion_percentage: document.getElementById('progress-modal-pct').value,
+    status: document.getElementById('progress-modal-status').value,
+    actual_completion_date: document.getElementById('progress-modal-actual-date').value,
+    inspected_by: document.getElementById('progress-modal-inspector').value,
+    remarks: document.getElementById('progress-modal-remarks').value
+  };
+
+  try {
+    const res = await fetch(`/api/interiors/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      closeModal();
+      if (activePage === 'interior') renderInteriorWorkspace(document.getElementById('module-page-content'));
+      else if (activeFranchiseId) loadFranchiseProfileData(activeFranchiseId);
+    } else {
+      alert(`Update failed: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert("Server error updating progress.");
+  }
+}
+
+async function deleteInteriorRecord(id) {
+  if (!confirm("Are you sure you want to delete this interior construction setup record? This action will be logged in the audit trail.")) return;
+
+  try {
+    const res = await fetch(`/api/interiors/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.status === 'success') {
+      if (activePage === 'interior') renderInteriorWorkspace(document.getElementById('module-page-content'));
+      else if (activeFranchiseId) loadFranchiseProfileData(activeFranchiseId);
+    } else {
+      alert(`Delete failed: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert("Server error deleting record.");
+  }
+}
+
+function renderProfileInteriorTab(container, data) {
+  const f = data.franchise;
+  const interiorList = data.interiors || [];
+  container.innerHTML = `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+      <h3>Interior & Store Construction Setup Workspaces</h3>
+      <button class="btn-ref-explore" onclick="openInteriorModal()" style="width: auto; padding: 6px 14px;">
+        <i class="fa-solid fa-plus"></i> + Add Construction Setup
+      </button>
+    </div>
+    <table class="custom-table">
+      <thead>
+        <tr>
+          <th>Contractor</th>
+          <th>Start / Target Date</th>
+          <th>Cost Breakdown</th>
+          <th>Total Setup Cost</th>
+          <th>Progress %</th>
+          <th>Status</th>
+          <th>Blueprint</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${interiorList.length ? interiorList.map(i => `
+          <tr>
+            <td><b>${i.contractor_name || 'Contractor'}</b><br><span style="font-size:0.75rem; color:#64748B;">Inspector: ${i.inspected_by || 'Staff'}</span></td>
+            <td>${i.start_date || '-'} to ${i.target_completion_date || '-'}</td>
+            <td>
+              <div style="font-size:0.75rem;">
+                Civil: Rs.${(i.civil_cost||0).toLocaleString('en-IN')} | Carpentry: Rs.${(i.carpentry_cost||0).toLocaleString('en-IN')}<br>
+                Elec: Rs.${(i.electrical_cost||0).toLocaleString('en-IN')} | HVAC: Rs.${(i.hvac_cost||0).toLocaleString('en-IN')}
+              </div>
+            </td>
+            <td><b style="color:#7C3AED;">Rs. ${(i.total_cost||0).toLocaleString('en-IN')}</b></td>
+            <td>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <div style="flex:1; background:#E2E8F0; border-radius:4px; height:6px; overflow:hidden;">
+                  <div style="width:${i.completion_percentage||0}%; background:${i.completion_percentage===100?'#059669':'#2563EB'}; height:100%;"></div>
+                </div>
+                <b>${i.completion_percentage||0}%</b>
+              </div>
+            </td>
+            <td>
+              <span class="records-badge" style="${
+                i.status === 'Completed' ? 'background:#D1FAE5; color:#059669;' :
+                i.status === 'In Progress' ? 'background:#DBEAFE; color:#1D4ED8;' :
+                i.status === 'Under Inspection' ? 'background:#FEF3C7; color:#D97706;' :
+                i.status === 'Delayed' ? 'background:#FEE2E2; color:#DC2626;' :
+                'background:#F1F5F9; color:#475569;'
+              }">${i.status || 'Planned'}</span>
+            </td>
+            <td>
+              ${i.blueprint_filepath ? `
+                <button onclick="previewPDF('${i.blueprint_filepath}')" style="background:#EFF6FF; color:#2563EB; border:1px solid #BFDBFE; padding:3px 8px; border-radius:6px; font-size:0.78rem; font-weight:600; cursor:pointer;">
+                  <i class="fa-solid fa-file"></i> View Blueprint
+                </button>
+              ` : '-'}
+            </td>
+            <td>
+              <button onclick="openUpdateInteriorProgressModalByRecordId(${i.id})" style="background:#ECFDF5; color:#047857; border:1px solid #A7F3D0; padding:3px 8px; border-radius:6px; font-size:0.75rem; font-weight:600; cursor:pointer;">Progress</button>
+            </td>
+          </tr>
+        `).join('') : '<tr><td colspan="8" style="text-align: center;">No store construction setup records logged for this franchise profile.</td></tr>'}
+      </tbody>
+    </table>
+  `;
+}
+
 
 
 

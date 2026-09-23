@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Franchise OS Management Software</title>
+  <title>Coral BIOS - Franchise Management Software</title>
   <!-- Google Fonts & FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/static/css/style.css?v=20260917_v11">
+  <link rel="stylesheet" href="/static/css/style.css?v=20260919_v15">
 </head>
 <body>
 
-<!-- Mandatory Full-Screen Login Overlay Screen -->
-<div id="login-screen" style="position: fixed; inset: 0; background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px;">
+<!-- Full-Screen Login Screen (Bypassed - Direct Access Enabled) -->
+<div id="login-screen" style="display: none; position: fixed; inset: 0; background: linear-gradient(135deg, #0B2545 0%, #133B70 100%); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
   <div style="background: #FFFFFF; width: 440px; max-width: 100%; border-radius: 16px; padding: 35px 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.4);">
     <div style="text-align: center; margin-bottom: 25px;">
-      <div style="display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; background: #EFF6FF; border-radius: 14px; margin-bottom: 12px; color: #2563EB; font-size: 1.8rem;">
-        <i class="fa-solid fa-store"></i>
+      <div style="display: inline-flex; align-items: center; justify-content: center; width: 100%; margin-bottom: 14px;">
+        <img src="/static/images/coral_bios_logo.png" alt="Coral BIOS" style="height: 54px; object-fit: contain;">
       </div>
-      <h2 style="margin: 0 0 6px 0; color: #0F172A; font-weight: 700; font-size: 1.4rem;">Franchise OS Login</h2>
+      <h2 style="margin: 0 0 6px 0; color: #0F2B5C; font-weight: 700; font-size: 1.4rem;">Coral BIOS Login</h2>
       <p style="margin: 0; color: #64748B; font-size: 0.85rem;">Sign in to access your authorized workspace</p>
     </div>
 
@@ -44,21 +44,24 @@
         </div>
       </div>
 
-      <button type="submit" id="login-btn" style="width: 100%; padding: 11px; border-radius: 8px; border: none; background: #2563EB; color: #FFFFFF; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: background 0.2s;">
+      <button type="submit" id="login-btn" style="width: 100%; padding: 11px; border-radius: 8px; border: none; background: #0099FF; color: #FFFFFF; font-weight: 600; font-size: 0.92rem; cursor: pointer; transition: background 0.2s;">
         <i class="fa-solid fa-right-to-bracket"></i> Sign In to Account
       </button>
     </form>
   </div>
 </div>
 
-<div id="app-container" style="display: none;">
+<div id="app-container" style="display: flex;">
 
   <!-- Sidebar Navigation -->
   <aside id="sidebar">
     <div class="brand">
-      <div class="brand-left">
-        <i class="fa-solid fa-store font-size-1-5"></i>
-        <span class="brand-name">Franchise OS</span>
+      <div class="brand-left" style="display: flex; align-items: center; gap: 10px;">
+        <img src="/static/images/coral_bios_logo.png" alt="Coral BIOS" style="height: 34px; background: #FFFFFF; padding: 2px 6px; border-radius: 6px; object-fit: contain;">
+        <div style="display: flex; flex-direction: column;" class="brand-text-container">
+          <span class="brand-name" style="font-weight: 700; font-size: 1.05rem; color: #FFFFFF; letter-spacing: -0.2px;">Coral <span style="color: #38BDF8;">BIOS</span></span>
+          <span style="font-size: 0.55rem; color: #94A3B8; font-weight: 600; letter-spacing: 0.4px;">TECHNOLOGY | SOLUTIONS</span>
+        </div>
       </div>
       <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Collapse Sidebar">
         <i class="fa-solid fa-chevron-left" id="toggle-icon"></i>
@@ -216,6 +219,7 @@
         <ul class="submenu">
           <li id="nav-users"><a href="javascript:void(0)" onclick="switchPage('users')"><i class="fa-solid fa-users-gear"></i> <span class="nav-text">User Management</span></a></li>
           <li id="nav-health"><a href="javascript:void(0)" onclick="switchPage('health')"><i class="fa-solid fa-server"></i> <span class="nav-text">Data Health & Persistence</span></a></li>
+          <li id="nav-sheets"><a href="javascript:void(0)" onclick="switchPage('sheets')"><i class="fa-solid fa-file-excel"></i> <span class="nav-text">Google Sheets Sync</span></a></li>
           <li><a href="javascript:void(0)" onclick="openExpenseCategoryModal()"><i class="fa-solid fa-tags"></i> <span class="nav-text">Expense Categories Master</span></a></li>
         </ul>
       </div>
@@ -252,9 +256,37 @@
       </div>
 
       <div class="header-right-actions">
+        <div class="test-role-switcher" style="display: flex; align-items: center; gap: 8px; background: #F1F5F9; border: 1px solid #CBD5E1; padding: 4px 12px; border-radius: 20px; font-size: 0.82rem;">
+          <i class="fa-solid fa-user-shield" style="color: #2563EB;"></i>
+          <span style="font-weight: 600; color: #475569;">Test Role:</span>
+          <select id="topbar-role-select" onchange="handleTestRoleChange(this.value)" style="border: none; background: transparent; font-weight: 700; color: #0F2B5C; cursor: pointer; outline: none; font-size: 0.82rem;">
+            <option value="Super Admin" selected>Super Admin</option>
+            <option value="Admin">Admin</option>
+            <option value="Manager">Manager</option>
+            <option value="Field Executive">Field Executive</option>
+            <option value="Accountant">Accountant</option>
+            <option value="Franchisee">Franchisee</option>
+          </select>
+        </div>
+
         <div class="search-input-pill">
           <i class="fa-solid fa-magnifying-glass"></i>
-          <input type="text" id="global-search" placeholder="Search franchise by name, location...">
+          <input type="text" id="global-search" placeholder="Search franchise, lead, or module...">
+        </div>
+
+        <div class="header-notification-box" style="position: relative; cursor: pointer; width: 38px; height: 38px; border-radius: 50%; background: #F1F5F9; border: 1px solid #CBD5E1; display: flex; align-items: center; justify-content: center; color: #475569;" title="3 New Notifications">
+          <i class="fa-regular fa-bell" style="font-size: 1.05rem;"></i>
+          <span style="position: absolute; top: -2px; right: -2px; background: #EF4444; color: #FFFFFF; font-size: 0.65rem; font-weight: 700; width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #FFFFFF;">3</span>
+        </div>
+
+        <div class="header-user-profile" style="display: flex; align-items: center; gap: 10px; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 4px 12px 4px 6px; border-radius: 20px;">
+          <div style="width: 32px; height: 32px; border-radius: 50%; background: #2563EB; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem;" id="top-avatar-circle">
+            SS
+          </div>
+          <div style="display: flex; flex-direction: column; text-align: left;">
+            <span id="top-user-fullname" style="font-size: 0.82rem; font-weight: 700; color: #0F172A; line-height: 1.1;">Sakshi Shukla</span>
+            <span id="top-user-role" style="font-size: 0.7rem; color: #64748B; line-height: 1.1;">Super Admin</span>
+          </div>
         </div>
 
         <button onclick="openNewFranchiseModal()" class="btn-add-franchise">
@@ -299,69 +331,217 @@
     <!-- Main Workspace Container -->
     <div id="main-workspace">
 
-      <!-- 1. CLEAN DASHBOARD OVERVIEW ONLY -->
+      <!-- 1. CORA BIOS EXECUTIVE DASHBOARD OVERVIEW -->
       <section id="dashboard-overview">
-        <!-- KPI Cards Grid -->
-        <div class="kpi-container">
-          <div class="kpi-card">
-            <div class="kpi-info">
-              <h4>Total Franchises</h4>
-              <p id="kpi-total-franchises">0</p>
-            </div>
-            <div class="kpi-icon icon-blue"><i class="fa-solid fa-store"></i></div>
-          </div>
 
-          <div class="kpi-card">
-            <div class="kpi-info">
-              <h4>Active Franchises</h4>
-              <p id="kpi-active-franchises">0</p>
-            </div>
-            <div class="kpi-icon icon-green"><i class="fa-solid fa-circle-check"></i></div>
+        <!-- Welcome Banner & Date Header -->
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h2 id="dash-greeting-title" style="margin: 0 0 4px 0; font-size: 1.45rem; font-weight: 800; color: #0F172A; letter-spacing: -0.3px;">Good Morning, Sakshi!</h2>
+            <p style="margin: 0; color: #64748B; font-size: 0.88rem;">Here's what's happening with your franchise business today.</p>
           </div>
-
-          <div class="kpi-card">
-            <div class="kpi-info">
-              <h4>Net Purchase</h4>
-              <p id="kpi-net-purchase">Rs. 0</p>
-            </div>
-            <div class="kpi-icon icon-purple"><i class="fa-solid fa-chart-bar"></i></div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-info">
-              <h4>GR Percentage</h4>
-              <p id="kpi-gr-percent">0%</p>
-            </div>
-            <div class="kpi-icon icon-red"><i class="fa-solid fa-percent"></i></div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-info">
-              <h4>Outstanding Balance</h4>
-              <p id="kpi-outstanding">Rs. 0</p>
-            </div>
-            <div class="kpi-icon icon-orange"><i class="fa-solid fa-triangle-exclamation"></i></div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-info">
-              <h4>Company Support</h4>
-              <p id="kpi-company-support">Rs. 0</p>
-            </div>
-            <div class="kpi-icon icon-blue"><i class="fa-solid fa-hand-holding-hand"></i></div>
+          <div style="position: relative;">
+            <button style="background: #FFFFFF; border: 1px solid #CBD5E1; border-radius: 8px; padding: 8px 14px; font-size: 0.82rem; font-weight: 600; color: #334155; display: flex; align-items: center; gap: 8px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+              <i class="fa-solid fa-calendar-days" style="color: #64748B;"></i>
+              <span id="dash-header-date">15 Sep 2026</span>
+              <i class="fa-solid fa-chevron-down" style="font-size: 0.75rem; color: #94A3B8;"></i>
+            </button>
           </div>
         </div>
 
-        <!-- Franchise Cards Workspace -->
-        <div class="page-content">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
-            <h3 style="margin: 0; font-size: 0.92rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
-              <i class="fa-solid fa-store" style="color: #2563EB;"></i> Franchise Overview
-            </h3>
+        <!-- 5 Pastel KPI Cards Row -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;" id="cora-kpi-row">
+          <!-- 1. Total Leads -->
+          <div onclick="switchPage('leads')" style="background: #EFF6FF; border: 1px solid #DBEAFE; border-radius: 12px; padding: 18px 16px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: #DBEAFE; color: #2563EB; display: flex; align-items: center; justify-content: center; font-size: 0.95rem;">
+                <i class="fa-solid fa-users"></i>
+              </div>
+              <span id="kpi-lead-trend" style="font-size: 0.72rem; font-weight: 700; color: #16A34A; background: #DCFCE7; padding: 2px 6px; border-radius: 12px;">&uarr; 12%</span>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: #475569;">Total Leads</span>
+            <div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px;">
+              <h3 id="kpi-total-leads-val" style="margin: 0; font-size: 1.6rem; font-weight: 800; color: #0F172A;">48</h3>
+              <span style="font-size: 0.7rem; color: #64748B;">vs. last month</span>
+            </div>
           </div>
-          <div id="franchise-cards-grid" class="franchise-grid">
-            <!-- Dynamic Franchise Cards Rendered Here -->
+
+          <!-- 2. Follow-ups Pending -->
+          <div onclick="switchPage('followup')" style="background: #F3E8FF; border: 1px solid #E9D5FF; border-radius: 12px; padding: 18px 16px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: #E9D5FF; color: #9333EA; display: flex; align-items: center; justify-content: center; font-size: 0.95rem;">
+                <i class="fa-solid fa-phone-volume"></i>
+              </div>
+              <span id="kpi-followup-trend" style="font-size: 0.72rem; font-weight: 700; color: #16A34A; background: #DCFCE7; padding: 2px 6px; border-radius: 12px;">&uarr; 8%</span>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: #475569;">Follow-ups Pending</span>
+            <div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px;">
+              <h3 id="kpi-pending-followups-val" style="margin: 0; font-size: 1.6rem; font-weight: 800; color: #0F172A;">18</h3>
+              <span style="font-size: 0.7rem; color: #64748B;">vs. last week</span>
+            </div>
           </div>
+
+          <!-- 3. Interested / Plans -->
+          <div onclick="switchPage('plans')" style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 12px; padding: 18px 16px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: #A7F3D0; color: #059669; display: flex; align-items: center; justify-content: center; font-size: 0.95rem;">
+                <i class="fa-solid fa-store"></i>
+              </div>
+              <span id="kpi-interested-trend" style="font-size: 0.72rem; font-weight: 700; color: #16A34A; background: #DCFCE7; padding: 2px 6px; border-radius: 12px;">&uarr; 20%</span>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: #475569;">Interested / Plans</span>
+            <div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px;">
+              <h3 id="kpi-interested-plans-val" style="margin: 0; font-size: 1.6rem; font-weight: 800; color: #0F172A;">12</h3>
+              <span style="font-size: 0.7rem; color: #64748B;">vs. last month</span>
+            </div>
+          </div>
+
+          <!-- 4. Tokens Received -->
+          <div onclick="switchPage('token')" style="background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 12px; padding: 18px 16px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: #FED7AA; color: #EA580C; display: flex; align-items: center; justify-content: center; font-size: 0.95rem;">
+                <i class="fa-solid fa-coins"></i>
+              </div>
+              <span id="kpi-tokens-trend" style="font-size: 0.72rem; font-weight: 700; color: #16A34A; background: #DCFCE7; padding: 2px 6px; border-radius: 12px;">&uarr; 17%</span>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: #475569;">Tokens Received</span>
+            <div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px;">
+              <h3 id="kpi-tokens-received-val" style="margin: 0; font-size: 1.6rem; font-weight: 800; color: #0F172A;">7</h3>
+              <span style="font-size: 0.7rem; color: #64748B;">vs. last month</span>
+            </div>
+          </div>
+
+          <!-- 5. Active Franchises -->
+          <div onclick="switchPage('active')" style="background: #FCE7F3; border: 1px solid #FBCFE8; border-radius: 12px; padding: 18px 16px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform 0.15s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: #FBCFE8; color: #DB2777; display: flex; align-items: center; justify-content: center; font-size: 0.95rem;">
+                <i class="fa-solid fa-building-circle-check"></i>
+              </div>
+              <span id="kpi-franchise-trend" style="font-size: 0.72rem; font-weight: 700; color: #16A34A; background: #DCFCE7; padding: 2px 6px; border-radius: 12px;">&uarr; 25%</span>
+            </div>
+            <span style="font-size: 0.8rem; font-weight: 600; color: #475569;">Active Franchises</span>
+            <div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px;">
+              <h3 id="kpi-active-franchises-val" style="margin: 0; font-size: 1.6rem; font-weight: 800; color: #0F172A;">5</h3>
+              <span style="font-size: 0.7rem; color: #64748B;">vs. last month</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Analytics Charts Row (2 Columns) -->
+        <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 20px; margin-bottom: 24px;">
+          <!-- Left: Franchise Growth Chart -->
+          <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 0.98rem; font-weight: 700; color: #0F172A;">Franchise Growth</h3>
+              <select style="padding: 4px 10px; border-radius: 6px; border: 1px solid #CBD5E1; font-size: 0.78rem; font-weight: 600; color: #475569;">
+                <option>Last 6 Months</option>
+                <option>Last 12 Months</option>
+              </select>
+            </div>
+
+            <!-- Bar Chart Canvas/SVG Container -->
+            <div id="cora-growth-bar-chart" style="height: 190px; position: relative; display: flex; align-items: flex-end; justify-content: space-around; padding-top: 20px; padding-bottom: 15px; border-bottom: 1px solid #F1F5F9;">
+              <!-- Rendered dynamically by JS -->
+            </div>
+
+            <!-- Chart Legend -->
+            <div style="display: flex; align-items: center; justify-content: center; gap: 20px; margin-top: 14px; font-size: 0.78rem; font-weight: 600; color: #475569;">
+              <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #2563EB;"></span> Leads</div>
+              <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #8B5CF6;"></span> Interested</div>
+              <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #10B981;"></span> Tokens</div>
+              <div style="display: flex; align-items: center; gap: 6px;"><span style="width: 10px; height: 10px; border-radius: 50%; background: #F59E0B;"></span> Franchises</div>
+            </div>
+          </div>
+
+          <!-- Right: Lead Sources Donut Chart -->
+          <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="margin-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 0.98rem; font-weight: 700; color: #0F172A;">Lead Sources</h3>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+              <!-- Donut SVG -->
+              <div style="position: relative; width: 145px; height: 145px; flex-shrink: 0;" id="cora-donut-chart-box">
+                <!-- SVG Donut rendered by JS -->
+              </div>
+              <!-- Sources Legend List -->
+              <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 10px;" id="cora-lead-sources-list">
+                <!-- Items rendered by JS -->
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bottom Grid Row (3 Columns) -->
+        <div style="display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 20px; align-items: start;">
+          <!-- Left: Franchise Status Table -->
+          <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 0.98rem; font-weight: 700; color: #0F172A;">Franchise Status</h3>
+              <a href="javascript:void(0)" onclick="switchPage('active')" style="color: #2563EB; font-size: 0.8rem; font-weight: 600; text-decoration: none;">View All</a>
+            </div>
+
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem;">
+                <thead>
+                  <tr style="border-bottom: 1px solid #E2E8F0; color: #64748B; font-weight: 600;">
+                    <th style="padding: 8px 6px;">Franchise Name</th>
+                    <th style="padding: 8px 6px;">Location</th>
+                    <th style="padding: 8px 6px;">Status</th>
+                    <th style="padding: 8px 6px;">Next Follow-up</th>
+                  </tr>
+                </thead>
+                <tbody id="cora-franchise-status-tbody">
+                  <!-- Rendered dynamically by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Middle: Upcoming Tasks -->
+          <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 0.98rem; font-weight: 700; color: #0F172A;">Upcoming Tasks</h3>
+              <a href="javascript:void(0)" onclick="switchPage('followup')" style="color: #2563EB; font-size: 0.8rem; font-weight: 600; text-decoration: none;">View All</a>
+            </div>
+
+            <div id="cora-upcoming-tasks-list" style="display: flex; flex-direction: column; gap: 12px;">
+              <!-- Rendered dynamically by JS -->
+            </div>
+          </div>
+
+          <!-- Right Column: Recent Activity + Add Lead Card -->
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Recent Activity Feed -->
+            <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 0.98rem; font-weight: 700; color: #0F172A;">Recent Activity</h3>
+                <a href="javascript:void(0)" onclick="switchPage('audit')" style="color: #2563EB; font-size: 0.8rem; font-weight: 600; text-decoration: none;">View All</a>
+              </div>
+
+              <div id="cora-recent-activity-feed" style="display: flex; flex-direction: column; gap: 14px;">
+                <!-- Rendered dynamically by JS -->
+              </div>
+            </div>
+
+            <!-- Grow Your Franchise Network Promo Card -->
+            <div style="background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%); border: 1px solid #BFDBFE; border-radius: 14px; padding: 22px 20px; text-align: center;">
+              <div style="width: 48px; height: 48px; background: #FFFFFF; border-radius: 12px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; color: #2563EB; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <i class="fa-solid fa-shop"></i>
+              </div>
+              <h4 style="margin: 0 0 6px 0; font-size: 0.95rem; font-weight: 700; color: #0F172A;">Grow Your Franchise Network</h4>
+              <p style="margin: 0 0 16px 0; font-size: 0.78rem; color: #475569; line-height: 1.4;">Manage leads, track progress and expand your business seamlessly.</p>
+              <button onclick="openNewLeadModal()" style="width: 100%; background: #2563EB; color: #FFFFFF; border: none; padding: 10px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; cursor: pointer; transition: background 0.2s;">
+                Add New Lead &rarr;
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Optional Collapsible Old Franchise Cards Grid (Hidden by default or below) -->
+        <div style="margin-top: 30px; display: none;" id="cora-legacy-cards-block">
+          <h4 style="font-size: 0.9rem; color: #64748B; margin-bottom: 10px;">Franchise Store Cards</h4>
+          <div id="franchise-cards-grid" class="franchise-grid"></div>
         </div>
       </section>
 

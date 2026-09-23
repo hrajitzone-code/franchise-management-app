@@ -297,6 +297,64 @@ class BrandingSetup(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
 
+class InteriorSetup(db.Model):
+    __tablename__ = 'interior_setups'
+    id = db.Column(db.Integer, primary_key=True)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
+    customer_name = db.Column(db.String(150), nullable=True)
+    contractor_name = db.Column(db.String(150), nullable=True)
+    start_date = db.Column(db.String(50), nullable=True)
+    target_completion_date = db.Column(db.String(50), nullable=True)
+    actual_completion_date = db.Column(db.String(50), nullable=True)
+    civil_cost = db.Column(db.Float, default=0.0)
+    carpentry_cost = db.Column(db.Float, default=0.0)
+    electrical_cost = db.Column(db.Float, default=0.0)
+    plumbing_cost = db.Column(db.Float, default=0.0)
+    hvac_cost = db.Column(db.Float, default=0.0)
+    completion_percentage = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(50), default='Planned')
+    blueprint_filename = db.Column(db.String(255), nullable=True)
+    blueprint_filepath = db.Column(db.String(500), nullable=True)
+    inspected_by = db.Column(db.String(100), nullable=True)
+    remarks = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    franchise = db.relationship('Franchise', backref=db.backref('interior_setups', lazy=True), foreign_keys=[franchise_id])
+    lead = db.relationship('Lead', backref=db.backref('interior_setups', lazy=True), foreign_keys=[lead_id])
+
+    @property
+    def total_cost(self):
+        return (self.civil_cost or 0.0) + (self.carpentry_cost or 0.0) + (self.electrical_cost or 0.0) + (self.plumbing_cost or 0.0) + (self.hvac_cost or 0.0)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'franchise_id': self.franchise_id,
+            'lead_id': self.lead_id,
+            'customer_name': self.customer_name or (self.franchise.owner_name if self.franchise else (self.lead.customer_name if self.lead else '')),
+            'contractor_name': self.contractor_name or '',
+            'start_date': self.start_date or '',
+            'target_completion_date': self.target_completion_date or '',
+            'actual_completion_date': self.actual_completion_date or '',
+            'civil_cost': self.civil_cost or 0.0,
+            'carpentry_cost': self.carpentry_cost or 0.0,
+            'electrical_cost': self.electrical_cost or 0.0,
+            'plumbing_cost': self.plumbing_cost or 0.0,
+            'hvac_cost': self.hvac_cost or 0.0,
+            'total_cost': self.total_cost,
+            'total_interior_cost': self.total_cost,
+            'completion_percentage': self.completion_percentage or 0,
+            'status': self.status or 'Planned',
+            'blueprint_filename': self.blueprint_filename or '',
+            'blueprint_filepath': self.blueprint_filepath or '',
+            'inspected_by': self.inspected_by or '',
+            'remarks': self.remarks or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else '',
+            'franchise_name': self.franchise.name if self.franchise else '',
+            'lead_name': self.lead.customer_name if self.lead else ''
+        }
+
 class MarketingCampaign(db.Model):
     __tablename__ = 'marketing_campaigns'
     id = db.Column(db.Integer, primary_key=True)
@@ -634,6 +692,7 @@ class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
     id = db.Column(db.Integer, primary_key=True)
     franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
     stage_name = db.Column(db.String(100), nullable=False)
     action = db.Column(db.String(100), nullable=False)
     field_changed = db.Column(db.String(100), nullable=True)
@@ -935,6 +994,139 @@ class Role(db.Model):
             'permissions': perms,
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
+
+class ApprovalAgreement(db.Model):
+    __tablename__ = 'approval_agreements'
+    id = db.Column(db.Integer, primary_key=True)
+    franchise_id = db.Column(db.Integer, db.ForeignKey('franchises.id'), nullable=True)
+    lead_id = db.Column(db.Integer, db.ForeignKey('leads.id'), nullable=True)
+    submitted_by = db.Column(db.String(100), nullable=False)
+    submission_date = db.Column(db.String(50), nullable=True)
+    stage = db.Column(db.String(100), default='Document Verification') # Document Verification, Management Review, Approved, Rejected, Agreement Pending, Agreement Sent, Agreement Signed
+    approved_by = db.Column(db.String(100), nullable=True)
+    approval_date = db.Column(db.String(50), nullable=True)
+    agreement_status = db.Column(db.String(50), default='Pending')
+    agreement_date = db.Column(db.String(50), nullable=True)
+    documents_path = db.Column(db.String(255), nullable=True)
+    remarks = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'franchise_id': self.franchise_id,
+            'lead_id': self.lead_id,
+            'submitted_by': self.submitted_by,
+            'submission_date': self.submission_date or '',
+            'stage': self.stage,
+            'approved_by': self.approved_by or '',
+            'approval_date': self.approval_date or '',
+            'agreement_status': self.agreement_status or 'Pending',
+            'agreement_date': self.agreement_date or '',
+            'documents_path': self.documents_path or '',
+            'remarks': self.remarks or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
+class Task(db.Model):
+    __tablename__ = 'tasks'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    related_person_or_franchise = db.Column(db.String(150), nullable=True)
+    module = db.Column(db.String(100), default='Leads')
+    due_date_time = db.Column(db.String(100), nullable=True)
+    priority = db.Column(db.String(50), default='Medium') # Low, Medium, High, Urgent
+    is_completed = db.Column(db.Boolean, default=False)
+    assigned_to = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'related_person_or_franchise': self.related_person_or_franchise or '',
+            'module': self.module or 'General',
+            'due_date_time': self.due_date_time or '',
+            'priority': self.priority or 'Medium',
+            'is_completed': bool(self.is_completed),
+            'assigned_to': self.assigned_to or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(150), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    type = db.Column(db.String(50), default='info')
+    link = db.Column(db.String(255), nullable=True)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'message': self.message,
+            'type': self.type,
+            'link': self.link or '#',
+            'is_read': bool(self.is_read),
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
+class GoogleSheetsConfig(db.Model):
+    __tablename__ = 'google_sheets_config'
+    id = db.Column(db.Integer, primary_key=True)
+    spreadsheet_id = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+    auto_sync_enabled = db.Column(db.Boolean, default=True)
+    last_sync_at = db.Column(db.DateTime, nullable=True)
+    last_status = db.Column(db.String(50), default='Not Configured') # Connected, Syncing, Error, Disconnected
+    error_message = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'spreadsheet_id': self.spreadsheet_id or '',
+            'is_active': bool(self.is_active),
+            'auto_sync_enabled': bool(self.auto_sync_enabled),
+            'last_sync_at': self.last_sync_at.strftime('%Y-%m-%d %H:%M:%S') if self.last_sync_at else '',
+            'last_status': self.last_status or 'Not Configured',
+            'error_message': self.error_message or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
+class GoogleSheetsSyncLog(db.Model):
+    __tablename__ = 'google_sheets_sync_logs'
+    id = db.Column(db.Integer, primary_key=True)
+    module_name = db.Column(db.String(100), nullable=False)
+    record_id = db.Column(db.Integer, nullable=False)
+    composite_id = db.Column(db.String(100), nullable=True) # e.g. LEAD:1
+    action = db.Column(db.String(50), default='SYNC') # CREATE, UPDATE, DELETE, SYNC_ALL
+    status = db.Column(db.String(50), default='PENDING') # SUCCESS, FAILED, PENDING
+    attempts = db.Column(db.Integer, default=1)
+    error_message = db.Column(db.Text, nullable=True)
+    payload_json = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'module_name': self.module_name,
+            'record_id': self.record_id,
+            'composite_id': self.composite_id or f"{self.module_name.upper()}:{self.record_id}",
+            'action': self.action,
+            'status': self.status,
+            'attempts': self.attempts,
+            'error_message': self.error_message or '',
+            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
+        }
+
+
+
 
 
 

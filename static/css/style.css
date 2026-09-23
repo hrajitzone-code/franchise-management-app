@@ -39,8 +39,8 @@ body {
   overflow: hidden;
 }
 
-#sidebar.collapsed {
-  width: 68px;
+#sidebar.collapsed .brand-text-container {
+  display: none !important;
 }
 
 #sidebar .brand {
@@ -114,9 +114,15 @@ body {
   white-space: nowrap;
 }
 
-.nav-single-item a:hover, .nav-single-item.active a {
+.nav-single-item a:hover {
   background-color: #1E293B;
-  color: #38BDF8;
+  color: #F8FAFC;
+}
+
+.nav-single-item.active a {
+  background-color: #2563EB;
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
 }
 
 /* Categories Accordion Header */
@@ -895,4 +901,93 @@ input, select, textarea, button {
   .kpi-cards-row {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* Layout Alignment & Professional Polish */
+.custom-table {
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.custom-table th {
+  background-color: #F8FAFC;
+  color: #475569;
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  padding: 14px 16px;
+  border-bottom: 2px solid #E2E8F0;
+}
+
+.custom-table td {
+  padding: 13px 16px;
+  vertical-align: middle;
+}
+
+.custom-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.custom-table tbody tr:hover {
+  background-color: #F8FAFC;
+}
+
+.btn-add-franchise, button[type="submit"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Status Badges Polish */
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.badge-pill-success {
+  background: #ECFDF5;
+  color: #047857;
+  border: 1px solid #A7F3D0;
+}
+
+.badge-pill-warning {
+  background: #FFFBEB;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+
+.badge-pill-info {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+.badge-pill-danger {
+  background: #FEF2F2;
+  color: #B91C1C;
+  border: 1px solid #FECACA;
+}
+
+/* Form inputs focus state */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #0099FF !important;
+  box-shadow: 0 0 0 3px rgba(0, 153, 255, 0.12) !important;
+}
+
+/* Glass & Card Transitions */
+.kpi-card, .ref-franchise-card, .dashboard-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpi-card:hover, .ref-franchise-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
 }
