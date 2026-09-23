@@ -26,7 +26,8 @@ from services.report_service import generate_pdf_report, generate_excel_report, 
 from services.storage_service import upload_file, get_file_url, is_supabase_configured
 from services.google_sheets_service import (
     is_google_sheets_configured, get_service_account_info,
-    sync_record_to_sheet, sync_all_modules, retry_failed_syncs, get_gspread_client
+    sync_record_to_sheet, sync_all_modules, retry_failed_syncs, get_gspread_client,
+    get_active_google_sheets_config
 )
 
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -3754,7 +3755,7 @@ def get_google_sheets_config():
 
     try:
         db.create_all()
-        cfg = GoogleSheetsConfig.query.first()
+        cfg = get_active_google_sheets_config()
         if not cfg:
             cfg = GoogleSheetsConfig(spreadsheet_id='', is_active=True, auto_sync_enabled=True, last_status='Not Configured')
             db.session.add(cfg)
@@ -3788,7 +3789,7 @@ def save_google_sheets_config():
         is_active = data.get('is_active', True)
         auto_sync_enabled = data.get('auto_sync_enabled', True)
 
-        cfg = GoogleSheetsConfig.query.first()
+        cfg = get_active_google_sheets_config()
         if not cfg:
             cfg = GoogleSheetsConfig()
             db.session.add(cfg)
@@ -3837,8 +3838,8 @@ def test_google_sheets_connection():
     if not is_configured:
         return jsonify({'status': 'error', 'message': f'Connection test failed: {status_msg}'}), 400
 
-    cfg = GoogleSheetsConfig.query.first()
-    spreadsheet_id = cfg.spreadsheet_id if cfg and cfg.spreadsheet_id else os.environ.get('GOOGLE_SPREADSHEET_ID')
+    cfg = get_active_google_sheets_config()
+    spreadsheet_id = (cfg.spreadsheet_id or '').strip() if cfg and cfg.spreadsheet_id else (os.environ.get('GOOGLE_SPREADSHEET_ID') or '').strip()
 
     try:
         gc = get_gspread_client()

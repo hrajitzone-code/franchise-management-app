@@ -74,13 +74,33 @@ def get_service_account_info():
 
     return None
 
+def get_active_google_sheets_config():
+    """
+    Centralized configuration resolver.
+    Retrieves the latest configuration record with a non-empty, non-null spreadsheet_id.
+    Fallback to the latest configuration record by ID if no populated record exists.
+    """
+    try:
+        cfg = GoogleSheetsConfig.query.filter(
+            GoogleSheetsConfig.spreadsheet_id != None,
+            GoogleSheetsConfig.spreadsheet_id != ''
+        ).order_by(GoogleSheetsConfig.id.desc()).first()
+
+        if not cfg:
+            cfg = GoogleSheetsConfig.query.order_by(GoogleSheetsConfig.id.desc()).first()
+
+        return cfg
+    except Exception as e:
+        print(f"[GOOGLE SHEETS CONFIG RESOLVER ERROR] {e}")
+        return None
+
 def is_google_sheets_configured():
     """Checks if Spreadsheet ID and Service Account Credentials are both present."""
     if not GSPREAD_AVAILABLE:
         return False, "gspread or google-auth package not installed"
 
-    cfg = GoogleSheetsConfig.query.first()
-    spreadsheet_id = cfg.spreadsheet_id if cfg and cfg.spreadsheet_id else os.environ.get('GOOGLE_SPREADSHEET_ID')
+    cfg = get_active_google_sheets_config()
+    spreadsheet_id = (cfg.spreadsheet_id or '').strip() if cfg and cfg.spreadsheet_id else (os.environ.get('GOOGLE_SPREADSHEET_ID') or '').strip()
     if not spreadsheet_id:
         return False, "Spreadsheet ID not configured"
 
@@ -137,8 +157,8 @@ def sync_record_to_sheet(module_key, record_dict, action='SYNC'):
         log_sync_status(module_key, record_id, composite_id, action, 'FAILED', f"Configuration incomplete: {msg}")
         return False, f"Configuration incomplete: {msg}"
 
-    cfg = GoogleSheetsConfig.query.first()
-    spreadsheet_id = cfg.spreadsheet_id if cfg and cfg.spreadsheet_id else os.environ.get('GOOGLE_SPREADSHEET_ID')
+    cfg = get_active_google_sheets_config()
+    spreadsheet_id = (cfg.spreadsheet_id or '').strip() if cfg and cfg.spreadsheet_id else (os.environ.get('GOOGLE_SPREADSHEET_ID') or '').strip()
 
     try:
         gc = get_gspread_client()
