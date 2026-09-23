@@ -3907,6 +3907,90 @@ def get_google_sheets_logs():
     })
 
 
+MODULE_MODEL_MAP = {
+    'leads': Lead,
+    'franchises': Franchise,
+    'followup': FollowUp,
+    'calling': CallHistory,
+    'token': TokenRecord,
+    'payments': Payment,
+    'expenses': Expense,
+    'visit_expenses': VisitExpense,
+    'purchases': Purchase,
+    'gr': GRReturn,
+    'training': TrainingRecord,
+    'interior': InteriorSetup,
+    'branding': BrandingSetup,
+    'marketing': MarketingCampaign,
+    'support': CompanySupport,
+    'materials': MaterialAsset,
+    'complaints': Complaint
+}
+
+
+@app.route('/api/google_sheets/sync_single', methods=['POST'])
+def handle_google_sheets_sync_single():
+    current_user = get_current_user()
+    if not current_user or current_user.role != 'Super Admin':
+        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
+
+    try:
+        data = request.json or {}
+        module_key = str(data.get('module', 'leads')).strip().lower()
+        record_id_raw = data.get('record_id')
+
+        if not record_id_raw:
+            return jsonify({'status': 'error', 'message': 'Record ID is required for test sync.'}), 400
+
+        try:
+            record_id = int(record_id_raw)
+        except ValueError:
+            return jsonify({'status': 'error', 'message': 'Invalid Record ID format. Integer expected.'}), 400
+
+        model_cls = MODULE_MODEL_MAP.get(module_key)
+        if not model_cls:
+            return jsonify({'status': 'error', 'message': f"Unsupported module '{module_key}'."}), 400
+
+        record = model_cls.query.get(record_id)
+        if not record:
+            return jsonify({'status': 'error', 'message': f"Record ID {record_id} not found in module '{module_key}'."}), 404
+
+        if not hasattr(record, 'to_dict'):
+            return jsonify({'status': 'error', 'message': f"Model for module '{module_key}' missing to_dict method."}), 500
+
+        record_dict = record.to_dict()
+        success, message = sync_record_to_sheet(module_key, record_dict, action='SINGLE_TEST')
+
+        from services.google_sheets_service import MODULE_TAB_MAPPING
+        tab_name = MODULE_TAB_MAPPING.get(module_key, module_key.capitalize())
+
+        if success:
+            log_audit(None, 'Google Sheets', 'Single Sync Test', current_user.full_name, remarks=f"Synced single record {module_key}:{record_id} to sheet tab '{tab_name}'.")
+            return jsonify({
+                'status': 'success',
+                'SUCCESS': True,
+                'message': f"Successfully synced record ID {record_id} to tab '{tab_name}'.",
+                'module': module_key,
+                'record_id': record_id,
+                'tab_name': tab_name,
+                'detail': message
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': f"Single record sync failed: {message}",
+                'module': module_key,
+                'record_id': record_id,
+                'tab_name': tab_name,
+                'error': message
+            }), 500
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"[GOOGLE SHEETS SINGLE SYNC ERROR] {e}")
+        return jsonify({'status': 'error', 'error': str(e), 'message': f'Single record sync failed: {str(e)}'}), 500
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050, debug=True)
 

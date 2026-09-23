@@ -4765,7 +4765,37 @@ async function loadGoogleSheetsWorkspace(containerEl) {
               <li><b>Single Unified Spreadsheet Architecture</b>: All 16 software modules share one central Google Sheet with dedicated auto-created tab worksheets (<code>Leads</code>, <code>Franchises</code>, <code>Payments</code>, etc.).</li>
               <li><b>Composite Unique Key Upsert</b>: Each record uses a unique <code>Record ID</code> (Column A) and composite key (<code>MODULE:ID</code>) to update existing rows and prevent duplicate entries.</li>
             </ul>
-          </div>
+        <!-- Safe Single-Record Sync Test Card -->
+        <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; padding: 22px; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+          <h4 style="margin: 0 0 10px 0; font-size: 1.05rem; font-weight: 700; color: #0F172A; display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-vial" style="color: #8B5CF6;"></i> Safe Single-Record Sync Test
+          </h4>
+          <p style="margin: 0 0 16px 0; font-size: 0.83rem; color: #64748B;">
+            Test Google Sheets synchronization on a single specific record without performing a full database sync.
+          </p>
+
+          <form onsubmit="triggerGoogleSheetsSingleSync(event); return false;" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 160px;">
+              <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Target Module</label>
+              <select id="single-sync-module" style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 0.85rem; background: #FFFFFF; color: #0F172A;">
+                <option value="leads">Leads & Assignments</option>
+                <option value="franchises">Active Franchises</option>
+                <option value="followup">Follow-ups</option>
+                <option value="payments">Payments & Fees</option>
+              </select>
+            </div>
+
+            <div style="flex: 1; min-width: 140px;">
+              <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Record ID</label>
+              <input type="number" id="single-sync-record-id" placeholder="e.g. 1" required min="1" style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 0.85rem; box-sizing: border-box;">
+            </div>
+
+            <button type="submit" id="single-sync-test-btn" style="background: #8B5CF6; color: #FFFFFF; font-weight: 600; padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; height: 38px;">
+              <i class="fa-solid fa-paper-plane"></i> Test Single Record Sync
+            </button>
+          </form>
+
+          <div id="single-sync-result-box" style="display: none; margin-top: 16px; padding: 14px; border-radius: 8px; font-size: 0.83rem;"></div>
         </div>
 
         <!-- Synchronization Log History -->
@@ -4896,6 +4926,76 @@ async function triggerGoogleSheetsRetryFailed() {
   } catch (err) {
     console.error("Retry failed error:", err);
     alert("Error retrying failed sync items: " + err.message);
+  }
+}
+
+async function triggerGoogleSheetsSingleSync(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById('single-sync-test-btn');
+  const resultBox = document.getElementById('single-sync-result-box');
+  if (btn) btn.disabled = true;
+
+  const moduleVal = document.getElementById('single-sync-module').value;
+  const recordIdVal = document.getElementById('single-sync-record-id').value.trim();
+
+  if (!recordIdVal) {
+    alert("Please enter a valid Record ID.");
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  if (resultBox) {
+    resultBox.style.display = 'block';
+    resultBox.style.background = '#F8FAFC';
+    resultBox.style.border = '1px solid #CBD5E1';
+    resultBox.style.color = '#475569';
+    resultBox.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Synchronizing record ${moduleVal}:${recordIdVal} to Google Sheet...`;
+  }
+
+  try {
+    const res = await fetch('/api/google_sheets/sync_single', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        module: moduleVal,
+        record_id: parseInt(recordIdVal, 10)
+      })
+    });
+    const data = await res.json();
+    const isSuccess = res.ok && (data.status === 'success' || data.status === 'SUCCESS' || data.SUCCESS === true);
+
+    if (resultBox) {
+      if (isSuccess) {
+        resultBox.style.background = '#DCFCE7';
+        resultBox.style.border = '1px solid #86EFAC';
+        resultBox.style.color = '#166534';
+        resultBox.innerHTML = `
+          <div style="font-weight: 700; margin-bottom: 4px;"><i class="fa-solid fa-circle-check"></i> Single Record Sync Successful</div>
+          <div><b>Module</b>: ${data.module} | <b>Record ID</b>: ${data.record_id} | <b>Sheet Tab</b>: '${data.tab_name}'</div>
+          <div style="margin-top: 4px; font-size: 0.78rem; opacity: 0.9;">${data.message || data.detail}</div>
+        `;
+      } else {
+        const errMsg = data.message || data.error || 'Sync test failed.';
+        resultBox.style.background = '#FEF2F2';
+        resultBox.style.border = '1px solid #FCA5A5';
+        resultBox.style.color = '#991B1B';
+        resultBox.innerHTML = `
+          <div style="font-weight: 700; margin-bottom: 4px;"><i class="fa-solid fa-circle-xmark"></i> Sync Test Failed</div>
+          <div>${errMsg}</div>
+        `;
+      }
+    }
+  } catch (err) {
+    console.error("Single sync error:", err);
+    if (resultBox) {
+      resultBox.style.display = 'block';
+      resultBox.style.background = '#FEF2F2';
+      resultBox.style.border = '1px solid #FCA5A5';
+      resultBox.style.color = '#991B1B';
+      resultBox.innerHTML = `<div style="font-weight: 700;">Error:</div><div>${err.message}</div>`;
+    }
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
