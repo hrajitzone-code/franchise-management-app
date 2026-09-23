@@ -4777,7 +4777,7 @@ async function loadGoogleSheetsWorkspace(containerEl) {
           <form onsubmit="triggerGoogleSheetsSingleSync(event); return false;" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;">
             <div style="flex: 1; min-width: 160px;">
               <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Target Module</label>
-              <select id="single-sync-module" style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 0.85rem; background: #FFFFFF; color: #0F172A;">
+              <select id="single-sync-module" onchange="loadSingleSyncRecords(this.value)" style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 0.85rem; background: #FFFFFF; color: #0F172A;">
                 <option value="leads">Leads & Assignments</option>
                 <option value="franchises">Active Franchises</option>
                 <option value="followup">Follow-ups</option>
@@ -4785,9 +4785,11 @@ async function loadGoogleSheetsWorkspace(containerEl) {
               </select>
             </div>
 
-            <div style="flex: 1; min-width: 140px;">
-              <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Record ID</label>
-              <input type="number" id="single-sync-record-id" placeholder="e.g. 1" required min="1" style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 0.85rem; box-sizing: border-box;">
+            <div style="flex: 2; min-width: 200px;">
+              <label style="display: block; font-size: 0.78rem; font-weight: 600; color: #334155; margin-bottom: 4px;">Select Database Record</label>
+              <select id="single-sync-record-id" style="width: 100%; padding: 9px 12px; border: 1px solid #CBD5E1; border-radius: 8px; font-size: 0.85rem; background: #FFFFFF; color: #0F172A;" required>
+                <option value="">Loading records from database...</option>
+              </select>
             </div>
 
             <button type="submit" id="single-sync-test-btn" style="background: #8B5CF6; color: #FFFFFF; font-weight: 600; padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; height: 38px;">
@@ -4830,9 +4832,46 @@ async function loadGoogleSheetsWorkspace(containerEl) {
 
       </div>
     `;
+
+    setTimeout(() => loadSingleSyncRecords('leads'), 50);
   } catch (err) {
     console.error("Error loading Google Sheets Workspace:", err);
     containerEl.innerHTML = `<div style="padding: 20px; color: #DC2626;">Failed to load Google Sheets configuration.</div>`;
+  }
+}
+
+async function loadSingleSyncRecords(moduleName) {
+  const selectEl = document.getElementById('single-sync-record-id');
+  if (!selectEl) return;
+  selectEl.innerHTML = '<option value="">Loading records from database...</option>';
+
+  const endpoints = {
+    'leads': '/api/leads',
+    'franchises': '/api/franchises',
+    'followup': '/api/followups',
+    'payments': '/api/payments'
+  };
+  const endpoint = endpoints[moduleName] || '/api/leads';
+
+  try {
+    const res = await fetch(endpoint);
+    const records = await res.json();
+    if (!Array.isArray(records) || records.length === 0) {
+      selectEl.innerHTML = '<option value="">No records found in database</option>';
+      return;
+    }
+
+    let html = '';
+    records.forEach(r => {
+      const name = r.customer_name || r.name || r.owner_name || `Record #${r.id}`;
+      const mobile = r.mobile || r.owner_mobile || r.phone || r.status || '';
+      const mobileStr = mobile ? ` — ${mobile}` : '';
+      html += `<option value="${r.id}">${name} — ID ${r.id}${mobileStr}</option>`;
+    });
+    selectEl.innerHTML = html;
+  } catch (err) {
+    console.error("Error loading sync test records:", err);
+    selectEl.innerHTML = '<option value="">Failed to load records from database</option>';
   }
 }
 

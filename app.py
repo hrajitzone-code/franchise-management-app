@@ -80,13 +80,20 @@ def get_sqlite_uri():
         db_path = '/tmp/franchise_management.db'
     return f"sqlite:///{db_path}"
 
+is_production_env = bool(os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'))
 db_url = sanitize_db_url(os.environ.get('DATABASE_URL'))
+
 if db_url:
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'pool_pre_ping': True,
         'pool_recycle': 300,
     }
+elif is_production_env:
+    # In Production mode without a valid DATABASE_URL, set an invalid PostgreSQL URI
+    # to force 503 errors on requests rather than falling back to SQLite.
+    print("[SECURITY GUARD] Production mode detected but DATABASE_URL is missing or invalid. Refusing SQLite fallback.")
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://invalid_prod_db_placeholder'
 else:
     app.config['SQLALCHEMY_DATABASE_URI'] = get_sqlite_uri()
 
@@ -140,7 +147,6 @@ def switch_to_sqlite():
         check_and_migrate_db()
         seed_default_expense_categories()
         seed_initial_team_users()
-        remove_demo_temporary_data()
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
@@ -173,6 +179,11 @@ def seed_default_expense_categories():
     db.session.commit()
 
 def remove_demo_temporary_data():
+    # Protection Guard: NEVER run demo data cleanup in production mode
+    if os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'):
+        print("[SECURITY GUARD] Refusing demo data removal in Production mode.")
+        return
+
     try:
         demo_codes = ["FR-1001", "FR-1002", "FR-1003"]
         demo_franchises = Franchise.query.filter(Franchise.code.in_(demo_codes)).all()
@@ -224,11 +235,6 @@ def seed_initial_team_users():
             )
             u.set_password(udata["password"])
             db.session.add(u)
-        else:
-            u.role = udata["role"]
-            u.is_active = True
-            if not u.check_password(udata["password"]) and not u.check_password(udata["password"].lower()):
-                u.set_password(udata["password"])
     db.session.commit()
 
 
@@ -287,12 +293,12 @@ def seed_initial_roles():
 
 with app.app_context():
     try:
-        db.create_all()
-        check_and_migrate_db()
-        seed_default_expense_categories()
-        seed_initial_roles()
-        seed_initial_team_users()
-        remove_demo_temporary_data()
+        if not is_production_env:
+            db.create_all()
+            check_and_migrate_db()
+            seed_default_expense_categories()
+            seed_initial_roles()
+            seed_initial_team_users()
     except Exception as e:
         print(f"DB startup initialization note: {e}")
 
@@ -381,36 +387,41 @@ _db_initialized = False
 @app.before_request
 def initialize_database_lazily():
     global _db_initialized
-    if not _db_initialized:
-        is_production = bool(os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'))
-        env_label = 'Vercel Production' if os.environ.get('VERCEL') else ('Production (DATABASE_URL configured)' if os.environ.get('DATABASE_URL') else 'Local Development')
-        active_engine = db.engine.name
-        db_url_present = bool(os.environ.get('DATABASE_URL'))
+    is_production = bool(os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'))
 
-        print(f"[DB DIAGNOSTIC] Env: {env_label} | Engine: {active_engine} | DATABASE_URL configured: {db_url_present}")
-
+    if is_production:
+        # Verify production PostgreSQL database connectivity
         try:
-            db.create_all()
-            check_and_migrate_db()
-            seed_default_expense_categories()
-            seed_initial_team_users()
-            remove_demo_temporary_data()
+            with db.engine.connect() as conn:
+                conn.execute(db.text("SELECT 1"))
+            _db_initialized = True
         except Exception as e:
+            print(f"[PRODUCTION DB FAILURE] PostgreSQL unreachable: {e}")
+            if request.path.startswith('/api/') and request.path != '/api/system/health':
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Production database temporarily unavailable'
+                }), 503
+            return
+    else:
+        if not _db_initialized:
             try:
-                db.session.rollback()
-            except Exception:
-                pass
-
-            if is_production:
-                print(f"[DB INITIALIZATION WARNING] Production PostgreSQL initialization note ({e}). Maintaining PostgreSQL engine (no fallback).")
-            else:
-                print(f"[DB INITIALIZATION WARNING] Local DB initialization note ({e}). Falling back to SQLite...")
+                db.create_all()
+                check_and_migrate_db()
+                seed_default_expense_categories()
+                seed_initial_team_users()
+            except Exception as e:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+                print(f"[LOCAL DB INITIALIZATION WARNING] Local DB note ({e}). Falling back to SQLite...")
                 try:
                     switch_to_sqlite()
                 except Exception as e2:
                     print(f"Local SQLite fallback failed: {e2}")
-        finally:
-            _db_initialized = True
+            finally:
+                _db_initialized = True
 
 @app.before_request
 def enforce_rbac_api_permissions():
@@ -534,23 +545,23 @@ def get_dashboard_stats():
 
     leads_this = Lead.query.filter(Lead.created_at >= this_month_start).count()
     leads_last = Lead.query.filter((Lead.created_at >= last_month_start) & (Lead.created_at <= last_month_end)).count()
-    lead_growth = round(((leads_this - leads_last) / (leads_last or 1)) * 100) if leads_last > 0 else (12 if total_leads > 0 else 0)
+    lead_growth = round(((leads_this - leads_last) / leads_last) * 100) if leads_last > 0 else (0 if leads_this == 0 else None)
 
     followups_this = FollowUp.query.filter(FollowUp.followup_date >= this_month_start).count()
     followups_last = FollowUp.query.filter((FollowUp.followup_date >= last_month_start) & (FollowUp.followup_date <= last_month_end)).count()
-    followup_growth = round(((followups_this - followups_last) / (followups_last or 1)) * 100) if followups_last > 0 else (8 if pending_followups > 0 else 0)
+    followup_growth = round(((followups_this - followups_last) / followups_last) * 100) if followups_last > 0 else (0 if followups_this == 0 else None)
 
     interested_this = Lead.query.filter((Lead.created_at >= this_month_start) & (Lead.plan_discussed != None) & (Lead.plan_discussed != '')).count()
     interested_last = Lead.query.filter((Lead.created_at >= last_month_start) & (Lead.created_at <= last_month_end) & (Lead.plan_discussed != None) & (Lead.plan_discussed != '')).count()
-    interested_growth = round(((interested_this - interested_last) / (interested_last or 1)) * 100) if interested_last > 0 else (20 if interested_plans > 0 else 0)
+    interested_growth = round(((interested_this - interested_last) / interested_last) * 100) if interested_last > 0 else (0 if interested_this == 0 else None)
 
     tokens_this = TokenRecord.query.filter(TokenRecord.created_at >= this_month_start).count()
     tokens_last = TokenRecord.query.filter((TokenRecord.created_at >= last_month_start) & (TokenRecord.created_at <= last_month_end)).count()
-    tokens_growth = round(((tokens_this - tokens_last) / (tokens_last or 1)) * 100) if tokens_last > 0 else (17 if tokens_received > 0 else 0)
+    tokens_growth = round(((tokens_this - tokens_last) / tokens_last) * 100) if tokens_last > 0 else (0 if tokens_this == 0 else None)
 
     franchises_this = Franchise.query.filter(Franchise.created_at >= this_month_start).count()
     franchises_last = Franchise.query.filter((Franchise.created_at >= last_month_start) & (Franchise.created_at <= last_month_end)).count()
-    franchise_growth = round(((franchises_this - franchises_last) / (franchises_last or 1)) * 100) if franchises_last > 0 else (25 if total_franchises > 0 else 0)
+    franchise_growth = round(((franchises_this - franchises_last) / franchises_last) * 100) if franchises_last > 0 else (0 if franchises_this == 0 else None)
 
     # Monthly Growth Chart Data (Last 6 Months)
     growth_chart_data = []
@@ -2250,21 +2261,25 @@ def update_delete_purchase(p_id):
 @app.route('/api/gr_returns', methods=['GET', 'POST'])
 def manage_gr_returns():
     if request.method == 'POST':
-        data = request.json or request.form
-        gr = GRReturn(
-            franchise_id=int(data.get('franchise_id', 1)),
-            gr_number=data.get('gr_number', f"GR-{int(datetime.datetime.now().timestamp())}"),
-            return_date=data.get('return_date', datetime.date.today().strftime('%Y-%m-%d')),
-            item_details=data.get('item_details', 'Returned Stock'),
-            return_amount=float(data.get('return_amount', 0.0)),
-            reason=data.get('reason', 'Quality/Defect'),
-            remarks=data.get('remarks', ''),
-            person=data.get('person', 'Warehouse Manager')
-        )
-        db.session.add(gr)
-        db.session.commit()
-        log_audit(gr.franchise_id, 'GR/Return', 'CREATE', gr.person, 'Goods Return', None, f"Rs.{gr.return_amount}", f"Added GR Return #{gr.gr_number}")
-        return jsonify({'status': 'success', 'gr_return': gr.to_dict()})
+        try:
+            data = request.json or request.form
+            gr = GRReturn(
+                franchise_id=int(data.get('franchise_id', 1)),
+                gr_number=data.get('gr_number', f"GR-{int(datetime.datetime.now().timestamp())}"),
+                return_date=data.get('return_date', datetime.date.today().strftime('%Y-%m-%d')),
+                item_details=data.get('item_details', 'Returned Stock'),
+                return_amount=float(data.get('return_amount', 0.0)),
+                reason=data.get('reason', 'Quality/Defect'),
+                remarks=data.get('remarks', ''),
+                person=data.get('person', 'Warehouse Manager')
+            )
+            db.session.add(gr)
+            db.session.commit()
+            log_audit(gr.franchise_id, 'GR/Return', 'CREATE', gr.person, 'Goods Return', None, f"Rs.{gr.return_amount}", f"Added GR Return #{gr.gr_number}")
+            return jsonify({'status': 'success', 'gr_return': gr.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'status': 'error', 'message': f"Failed to save GR return record: {str(e)}"}), 500
 
     grs = GRReturn.query.order_by(GRReturn.created_at.desc()).all()
     return jsonify([g.to_dict() for g in grs])
@@ -2272,47 +2287,55 @@ def manage_gr_returns():
 @app.route('/api/gr_returns/<int:g_id>', methods=['PUT', 'DELETE'])
 def update_delete_gr_return(g_id):
     gr = GRReturn.query.get_or_404(g_id)
-    if request.method == 'DELETE':
-        db.session.delete(gr)
-        db.session.commit()
-        log_audit(gr.franchise_id, 'GR/Return', 'DELETE', 'Admin', 'Goods Return', f"Rs.{gr.return_amount}", 'Deleted', f"Deleted GR Return #{gr.gr_number}")
-        return jsonify({'status': 'success', 'message': f"GR Return #{gr.gr_number} deleted."})
+    try:
+        if request.method == 'DELETE':
+            db.session.delete(gr)
+            db.session.commit()
+            log_audit(gr.franchise_id, 'GR/Return', 'DELETE', 'Admin', 'Goods Return', f"Rs.{gr.return_amount}", 'Deleted', f"Deleted GR Return #{gr.gr_number}")
+            return jsonify({'status': 'success', 'message': f"GR Return #{gr.gr_number} deleted."})
 
-    data = request.json
-    gr.gr_number = data.get('gr_number', gr.gr_number)
-    gr.return_date = data.get('return_date', gr.return_date)
-    gr.item_details = data.get('item_details', gr.item_details)
-    gr.return_amount = float(data.get('return_amount', gr.return_amount))
-    gr.reason = data.get('reason', gr.reason)
-    gr.person = data.get('person', gr.person)
-    gr.remarks = data.get('remarks', gr.remarks)
-    db.session.commit()
-    log_audit(gr.franchise_id, 'GR/Return', 'UPDATE', gr.person, 'Goods Return', None, f"Rs.{gr.return_amount}", f"Updated GR Return #{gr.gr_number}")
-    return jsonify({'status': 'success', 'gr_return': gr.to_dict()})
+        data = request.json
+        gr.gr_number = data.get('gr_number', gr.gr_number)
+        gr.return_date = data.get('return_date', gr.return_date)
+        gr.item_details = data.get('item_details', gr.item_details)
+        gr.return_amount = float(data.get('return_amount', gr.return_amount))
+        gr.reason = data.get('reason', gr.reason)
+        gr.person = data.get('person', gr.person)
+        gr.remarks = data.get('remarks', gr.remarks)
+        db.session.commit()
+        log_audit(gr.franchise_id, 'GR/Return', 'UPDATE', gr.person, 'Goods Return', None, f"Rs.{gr.return_amount}", f"Updated GR Return #{gr.gr_number}")
+        return jsonify({'status': 'success', 'gr_return': gr.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f"Failed to update/delete GR return record: {str(e)}"}), 500
 
 @app.route('/api/company_support', methods=['GET', 'POST'])
 def manage_company_support():
     if request.method == 'POST':
-        data = request.json or request.form
-        cs = CompanySupport(
-            franchise_id=int(data.get('franchise_id', 1)),
-            interior_support=float(data.get('interior_support', 0.0)),
-            training_support=float(data.get('training_support', 0.0)),
-            influencer_support=float(data.get('influencer_support', 0.0)),
-            branding_support=float(data.get('branding_support', 0.0)),
-            marketing_support=float(data.get('marketing_support', 0.0)),
-            material_support=float(data.get('material_support', 0.0)),
-            samples_support=float(data.get('samples_support', 0.0)),
-            travel_support=float(data.get('travel_support', 0.0)),
-            other_support=float(data.get('other_support', 0.0)),
-            date_provided=data.get('date_provided', datetime.date.today().strftime('%Y-%m-%d')),
-            remarks=data.get('remarks', ''),
-            person=data.get('person', 'Accounts Admin')
-        )
-        db.session.add(cs)
-        db.session.commit()
-        log_audit(cs.franchise_id, 'Company Support', 'CREATE', cs.person, 'Investment Summary', None, f"Rs.{cs.total_investment}", "Recorded Company Support & Investment")
-        return jsonify({'status': 'success', 'company_support': cs.to_dict()})
+        try:
+            data = request.json or request.form
+            cs = CompanySupport(
+                franchise_id=int(data.get('franchise_id', 1)),
+                interior_support=float(data.get('interior_support', 0.0)),
+                training_support=float(data.get('training_support', 0.0)),
+                influencer_support=float(data.get('influencer_support', 0.0)),
+                branding_support=float(data.get('branding_support', 0.0)),
+                marketing_support=float(data.get('marketing_support', 0.0)),
+                material_support=float(data.get('material_support', 0.0)),
+                samples_support=float(data.get('samples_support', 0.0)),
+                travel_support=float(data.get('travel_support', 0.0)),
+                other_support=float(data.get('other_support', 0.0)),
+                date_provided=data.get('date_provided', datetime.date.today().strftime('%Y-%m-%d')),
+                remarks=data.get('remarks', ''),
+                person=data.get('person', 'Accounts Admin')
+            )
+            db.session.add(cs)
+            db.session.commit()
+            log_audit(cs.franchise_id, 'Company Support', 'CREATE', cs.person, 'Investment Summary', None, f"Rs.{cs.total_investment}", "Recorded Company Support & Investment")
+            return jsonify({'status': 'success', 'company_support': cs.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'status': 'error', 'message': f"Failed to save company support record: {str(e)}"}), 500
 
     supports = CompanySupport.query.order_by(CompanySupport.created_at.desc()).all()
     return jsonify([c.to_dict() for c in supports])
@@ -2320,28 +2343,32 @@ def manage_company_support():
 @app.route('/api/company_support/<int:c_id>', methods=['PUT', 'DELETE'])
 def update_delete_company_support(c_id):
     cs = CompanySupport.query.get_or_404(c_id)
-    if request.method == 'DELETE':
-        db.session.delete(cs)
-        db.session.commit()
-        log_audit(cs.franchise_id, 'Company Support', 'DELETE', 'Admin', 'Company Support', f"Rs.{cs.total_investment}", 'Deleted', f"Deleted Support Record #{c_id}")
-        return jsonify({'status': 'success', 'message': f"Company Support Record #{c_id} deleted."})
+    try:
+        if request.method == 'DELETE':
+            db.session.delete(cs)
+            db.session.commit()
+            log_audit(cs.franchise_id, 'Company Support', 'DELETE', 'Admin', 'Company Support', f"Rs.{cs.total_investment}", 'Deleted', f"Deleted Support Record #{c_id}")
+            return jsonify({'status': 'success', 'message': f"Company Support Record #{c_id} deleted."})
 
-    data = request.json
-    cs.interior_support = float(data.get('interior_support', cs.interior_support))
-    cs.training_support = float(data.get('training_support', cs.training_support))
-    cs.influencer_support = float(data.get('influencer_support', cs.influencer_support))
-    cs.branding_support = float(data.get('branding_support', cs.branding_support))
-    cs.marketing_support = float(data.get('marketing_support', cs.marketing_support))
-    cs.material_support = float(data.get('material_support', cs.material_support))
-    cs.samples_support = float(data.get('samples_support', cs.samples_support))
-    cs.travel_support = float(data.get('travel_support', cs.travel_support))
-    cs.other_support = float(data.get('other_support', cs.other_support))
-    cs.date_provided = data.get('date_provided', cs.date_provided)
-    cs.person = data.get('person', cs.person)
-    cs.remarks = data.get('remarks', cs.remarks)
-    db.session.commit()
-    log_audit(cs.franchise_id, 'Company Support', 'UPDATE', cs.person, 'Company Support', None, f"Rs.{cs.total_investment}", f"Updated Support Record #{c_id}")
-    return jsonify({'status': 'success', 'company_support': cs.to_dict()})
+        data = request.json or {}
+        cs.interior_support = float(data.get('interior_support', cs.interior_support))
+        cs.training_support = float(data.get('training_support', cs.training_support))
+        cs.influencer_support = float(data.get('influencer_support', cs.influencer_support))
+        cs.branding_support = float(data.get('branding_support', cs.branding_support))
+        cs.marketing_support = float(data.get('marketing_support', cs.marketing_support))
+        cs.material_support = float(data.get('material_support', cs.material_support))
+        cs.samples_support = float(data.get('samples_support', cs.samples_support))
+        cs.travel_support = float(data.get('travel_support', cs.travel_support))
+        cs.other_support = float(data.get('other_support', cs.other_support))
+        cs.date_provided = data.get('date_provided', cs.date_provided)
+        cs.person = data.get('person', cs.person)
+        cs.remarks = data.get('remarks', cs.remarks)
+        db.session.commit()
+        log_audit(cs.franchise_id, 'Company Support', 'UPDATE', cs.person, 'Company Support', None, f"Rs.{cs.total_investment}", f"Updated Support Record #{c_id}")
+        return jsonify({'status': 'success', 'company_support': cs.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f"Failed to update/delete company support record: {str(e)}"}), 500
 
 # --- INTERIOR & STORE CONSTRUCTION SETUP API ENDPOINTS ---
 
@@ -3344,58 +3371,33 @@ def get_system_health():
             conn.execute(db.text("SELECT 1"))
         ping_ms = round((time.time() - start_time) * 1000, 2)
         db_connected = True
-    except Exception as e:
+    except Exception:
         db_connected = False
 
-    engine_name = db.engine.name
-    is_postgres = 'postgres' in engine_name.lower()
-    
-    # Table counts
-    inspector = db.inspect(db.engine)
-    tables = inspector.get_table_names() if db_connected else []
-    table_counts = {}
-    total_records = 0
-
-    if db_connected:
-        for t in sorted(tables):
-            if not t.startswith('sqlite_'):
-                try:
-                    with db.engine.connect() as conn:
-                        res = conn.execute(db.text(f"SELECT count(*) FROM \"{t}\"")).fetchone()
-                        cnt = res[0] if res else 0
-                        table_counts[t] = cnt
-                        total_records += cnt
-                except Exception:
-                    table_counts[t] = 0
-
-    # Storage check
+    is_production = bool(os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'))
+    engine_name = 'postgresql' if ('postgres' in db.engine.name.lower() or is_production) else 'sqlite'
     sup_configured = is_supabase_configured()
-    upload_folder = app.config.get('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'uploads'))
-    local_file_count = len([f for f in os.listdir(upload_folder) if os.path.isfile(os.path.join(upload_folder, f)) and f != '.gitkeep']) if os.path.exists(upload_folder) else 0
+
+    from services.google_sheets_service import is_google_sheets_configured
+    gs_configured, _ = is_google_sheets_configured()
+
+    status_str = 'healthy' if db_connected else 'unhealthy'
 
     return jsonify({
-        'status': 'success',
+        'status': status_str,
+        'environment': 'production' if is_production else 'local_development',
         'database': {
-            'engine': 'PostgreSQL' if is_postgres else 'SQLite',
-            'dialect': engine_name,
-            'connection_url': str(db.engine.url),
-            'status': 'CONNECTED' if db_connected else 'DISCONNECTED',
-            'ping_ms': ping_ms,
-            'is_production_cloud': is_postgres,
-            'persistence_mode': 'Cloud Multi-User (PostgreSQL)' if is_postgres else 'Local Development Fallback (SQLite)'
+            'engine': engine_name,
+            'connected': db_connected,
+            'ping_ms': ping_ms
         },
         'storage': {
-            'provider': 'Supabase Storage' if sup_configured else 'Local Storage',
-            'is_supabase_configured': sup_configured,
-            'upload_folder': upload_folder,
-            'total_files': local_file_count
+            'provider': 'supabase' if sup_configured else 'local'
         },
-        'records_summary': {
-            'total_tables': len(table_counts),
-            'total_records': total_records,
-            'table_counts': table_counts
+        'google_sheets': {
+            'configured': gs_configured
         }
-    })
+    }), (200 if db_connected else 503)
 
 @app.route('/api/users', methods=['GET'])
 def get_users():
@@ -3805,8 +3807,6 @@ def save_google_sheets_config():
         return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
     try:
-        db.create_all()
-
         data = request.json or {}
         spreadsheet_id = data.get('spreadsheet_id', '').strip()
         is_active = data.get('is_active', True)
@@ -3822,7 +3822,7 @@ def save_google_sheets_config():
         cfg.auto_sync_enabled = bool(auto_sync_enabled)
         cfg.updated_at = datetime.datetime.utcnow()
 
-        # If Super Admin provides raw Service Account JSON text, write to server config file (NEVER stored in DB!)
+        # Handle Service Account JSON text if provided
         sa_json_text = data.get('service_account_json', '').strip()
         if sa_json_text:
             try:
@@ -3833,6 +3833,8 @@ def save_google_sheets_config():
                 with open(sa_file_path, 'w', encoding='utf-8') as f:
                     json.dump(parsed_json, f, indent=2)
                 print("[GOOGLE SHEETS] Successfully saved Service Account JSON to server config file.")
+            except OSError as os_err:
+                print(f"[GOOGLE SHEETS] Note: Filesystem is read-only ({os_err}). Please configure GOOGLE_SERVICE_ACCOUNT_JSON in Vercel environment variables.")
             except Exception as e:
                 return jsonify({'status': 'error', 'error': str(e), 'message': f'Invalid Service Account JSON formatting: {e}'}), 400
 
