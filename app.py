@@ -3752,21 +3752,26 @@ def get_google_sheets_config():
     if not current_user or current_user.role != 'Super Admin':
         return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
-    cfg = GoogleSheetsConfig.query.first()
-    if not cfg:
-        cfg = GoogleSheetsConfig(spreadsheet_id='', is_active=True, auto_sync_enabled=True, last_status='Not Configured')
-        db.session.add(cfg)
-        db.session.commit()
+    try:
+        db.create_all()
+        cfg = GoogleSheetsConfig.query.first()
+        if not cfg:
+            cfg = GoogleSheetsConfig(spreadsheet_id='', is_active=True, auto_sync_enabled=True, last_status='Not Configured')
+            db.session.add(cfg)
+            db.session.commit()
 
-    is_configured, status_msg = is_google_sheets_configured()
-    sa_present = bool(get_service_account_info())
+        is_configured, status_msg = is_google_sheets_configured()
+        sa_present = bool(get_service_account_info())
 
-    res_data = cfg.to_dict()
-    res_data['is_configured'] = is_configured
-    res_data['status_message'] = status_msg
-    res_data['service_account_configured'] = sa_present
-    # Note: Private JSON keys are NEVER exposed in frontend response
-    return jsonify({'status': 'success', 'config': res_data})
+        res_data = cfg.to_dict()
+        res_data['is_configured'] = is_configured
+        res_data['status_message'] = status_msg
+        res_data['service_account_configured'] = sa_present
+        return jsonify({'status': 'success', 'config': res_data})
+    except Exception as e:
+        db.session.rollback()
+        print(f"[GOOGLE SHEETS] Get Config Error: {e}")
+        return jsonify({'status': 'error', 'error': str(e), 'message': f'Failed to retrieve configuration: {str(e)}'}), 500
 
 
 @app.route('/api/google_sheets/config', methods=['POST'])
@@ -3775,39 +3780,51 @@ def save_google_sheets_config():
     if not current_user or current_user.role != 'Super Admin':
         return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
-    data = request.json or {}
-    spreadsheet_id = data.get('spreadsheet_id', '').strip()
-    is_active = data.get('is_active', True)
-    auto_sync_enabled = data.get('auto_sync_enabled', True)
+    try:
+        db.create_all()
 
-    cfg = GoogleSheetsConfig.query.first()
-    if not cfg:
-        cfg = GoogleSheetsConfig()
-        db.session.add(cfg)
+        data = request.json or {}
+        spreadsheet_id = data.get('spreadsheet_id', '').strip()
+        is_active = data.get('is_active', True)
+        auto_sync_enabled = data.get('auto_sync_enabled', True)
 
-    cfg.spreadsheet_id = spreadsheet_id
-    cfg.is_active = bool(is_active)
-    cfg.auto_sync_enabled = bool(auto_sync_enabled)
-    cfg.updated_at = datetime.datetime.utcnow()
+        cfg = GoogleSheetsConfig.query.first()
+        if not cfg:
+            cfg = GoogleSheetsConfig()
+            db.session.add(cfg)
 
-    # If Super Admin provides raw Service Account JSON text, write to server config file (NEVER stored in DB!)
-    sa_json_text = data.get('service_account_json', '').strip()
-    if sa_json_text:
-        try:
-            parsed_json = json.loads(sa_json_text)
-            config_dir = os.path.join(BASE_DIR, 'config')
-            os.makedirs(config_dir, exist_ok=True)
-            sa_file_path = os.path.join(config_dir, 'google_service_account.json')
-            with open(sa_file_path, 'w', encoding='utf-8') as f:
-                json.dump(parsed_json, f, indent=2)
-            print("[GOOGLE SHEETS] Successfully saved Service Account JSON to server config file.")
-        except Exception as e:
-            return jsonify({'status': 'error', 'message': f'Invalid Service Account JSON formatting: {e}'}), 400
+        cfg.spreadsheet_id = spreadsheet_id
+        cfg.is_active = bool(is_active)
+        cfg.auto_sync_enabled = bool(auto_sync_enabled)
+        cfg.updated_at = datetime.datetime.utcnow()
 
-    db.session.commit()
-    log_audit(None, 'Google Sheets', 'Save Config', current_user.full_name, remarks=f"Updated Google Sheets config (Spreadsheet ID: {spreadsheet_id}).")
+        # If Super Admin provides raw Service Account JSON text, write to server config file (NEVER stored in DB!)
+        sa_json_text = data.get('service_account_json', '').strip()
+        if sa_json_text:
+            try:
+                parsed_json = json.loads(sa_json_text)
+                config_dir = os.path.join(BASE_DIR, 'config')
+                os.makedirs(config_dir, exist_ok=True)
+                sa_file_path = os.path.join(config_dir, 'google_service_account.json')
+                with open(sa_file_path, 'w', encoding='utf-8') as f:
+                    json.dump(parsed_json, f, indent=2)
+                print("[GOOGLE SHEETS] Successfully saved Service Account JSON to server config file.")
+            except Exception as e:
+                return jsonify({'status': 'error', 'error': str(e), 'message': f'Invalid Service Account JSON formatting: {e}'}), 400
 
-    return jsonify({'status': 'success', 'message': 'Google Sheets configuration saved successfully!', 'config': cfg.to_dict()})
+        db.session.commit()
+        log_audit(None, 'Google Sheets', 'Save Config', current_user.full_name, remarks=f"Updated Google Sheets config (Spreadsheet ID: {spreadsheet_id}).")
+
+        return jsonify({
+            'status': 'success',
+            'SUCCESS': True,
+            'message': 'Google Sheets configuration saved successfully!',
+            'config': cfg.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"[GOOGLE SHEETS] Save Config Error: {e}")
+        return jsonify({'status': 'error', 'error': str(e), 'message': f'Failed to save configuration: {str(e)}'}), 500
 
 
 @app.route('/api/google_sheets/test', methods=['POST'])

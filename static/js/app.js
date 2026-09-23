@@ -4826,15 +4826,17 @@ async function saveGoogleSheetsConfig(e) {
       })
     });
     const data = await res.json();
-    if (res.ok && data.status === 'SUCCESS') {
+    const isSuccess = res.ok && (data.status === 'success' || data.status === 'SUCCESS' || data.SUCCESS === true);
+    if (isSuccess) {
       alert("Google Sheets configuration saved successfully!");
       renderGoogleSheetsWorkspace(document.getElementById('module-page-content'));
     } else {
-      alert("Failed to save configuration: " + (data.error || 'Unknown error'));
+      const errMsg = data.message || data.error || (res.statusText ? `HTTP ${res.status}: ${res.statusText}` : 'Unknown error');
+      alert("Failed to save configuration: " + errMsg);
     }
   } catch (err) {
     console.error("Save config error:", err);
-    alert("An error occurred while saving configuration.");
+    alert("An error occurred while saving configuration: " + err.message);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -4844,15 +4846,18 @@ async function testGoogleSheetsConnection() {
   try {
     const res = await fetch('/api/google_sheets/test', { method: 'POST' });
     const data = await res.json();
-    if (res.ok && data.status === 'SUCCESS') {
-      alert(`✅ Connection Successful!\nSpreadsheet Title: ${data.title}\nSpreadsheet ID: ${data.spreadsheet_id}`);
+    const isSuccess = res.ok && (data.status === 'success' || data.status === 'SUCCESS' || data.SUCCESS === true);
+    if (isSuccess) {
+      const title = data.spreadsheet_title || data.title || 'Connected Sheet';
+      alert(`✅ Connection Successful!\nSpreadsheet Title: ${title}\nSpreadsheet ID: ${data.spreadsheet_id || ''}`);
       renderGoogleSheetsWorkspace(document.getElementById('module-page-content'));
     } else {
-      alert(`❌ Connection Test Failed:\n${data.error || 'Check service account JSON and spreadsheet permission (share with client_email).'}`);
+      const errMsg = data.message || data.error || 'Check service account JSON and spreadsheet permission (share with client_email).';
+      alert(`❌ Connection Test Failed:\n${errMsg}`);
     }
   } catch (err) {
     console.error("Test connection error:", err);
-    alert("Error testing Google Sheets connection.");
+    alert("Error testing Google Sheets connection: " + err.message);
   }
 }
 
@@ -4862,15 +4867,17 @@ async function triggerGoogleSheetsSyncAll() {
   try {
     const res = await fetch('/api/google_sheets/sync_all', { method: 'POST' });
     const data = await res.json();
-    if (res.ok && data.status === 'SUCCESS') {
+    const isSuccess = res.ok && (data.status === 'success' || data.status === 'SUCCESS' || data.SUCCESS === true);
+    if (isSuccess) {
       alert(`✅ Synchronization Completed!\nTotal Records Processed: ${data.total_synced}\nFailed Items: ${data.total_failed}`);
       renderGoogleSheetsWorkspace(document.getElementById('module-page-content'));
     } else {
-      alert(`❌ Sync Failed:\n${data.error || 'Check Google Sheets settings.'}`);
+      const errMsg = data.message || data.error || 'Check Google Sheets settings.';
+      alert(`❌ Sync Failed:\n${errMsg}`);
     }
   } catch (err) {
     console.error("Sync all error:", err);
-    alert("Error executing sync all data.");
+    alert("Error executing sync all data: " + err.message);
   }
 }
 
@@ -4878,15 +4885,17 @@ async function triggerGoogleSheetsRetryFailed() {
   try {
     const res = await fetch('/api/google_sheets/retry_failed', { method: 'POST' });
     const data = await res.json();
-    if (res.ok && data.status === 'SUCCESS') {
+    const isSuccess = res.ok && (data.status === 'success' || data.status === 'SUCCESS' || data.SUCCESS === true);
+    if (isSuccess) {
       alert(`✅ Retry Execution Completed!\nRetried Logs: ${data.total_retried}\nNewly Synced: ${data.total_synced}`);
       renderGoogleSheetsWorkspace(document.getElementById('module-page-content'));
     } else {
-      alert(`❌ Retry Failed:\n${data.error || 'No failed logs to retry or connection issue.'}`);
+      const errMsg = data.message || data.error || 'No failed logs to retry or connection issue.';
+      alert(`❌ Retry Failed:\n${errMsg}`);
     }
   } catch (err) {
     console.error("Retry failed error:", err);
-    alert("Error retrying failed sync items.");
+    alert("Error retrying failed sync items: " + err.message);
   }
 }
 
