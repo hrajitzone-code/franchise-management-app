@@ -123,6 +123,11 @@ def check_and_migrate_db():
         print(f"DB auto-migration note: {e}")
 
 def switch_to_sqlite():
+    # Production Database Guard: Refuse SQLite engine fallback in Production mode
+    if os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'):
+        print("[SECURITY GUARD] Refusing SQLite engine fallback in Production mode (VERCEL or DATABASE_URL present).")
+        return
+
     sqlite_uri = get_sqlite_uri()
     print(f"Switching database engine to SQLite: {sqlite_uri}")
     app.config['SQLALCHEMY_DATABASE_URI'] = sqlite_uri
@@ -377,6 +382,13 @@ _db_initialized = False
 def initialize_database_lazily():
     global _db_initialized
     if not _db_initialized:
+        is_production = bool(os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'))
+        env_label = 'Vercel Production' if os.environ.get('VERCEL') else ('Production (DATABASE_URL configured)' if os.environ.get('DATABASE_URL') else 'Local Development')
+        active_engine = db.engine.name
+        db_url_present = bool(os.environ.get('DATABASE_URL'))
+
+        print(f"[DB DIAGNOSTIC] Env: {env_label} | Engine: {active_engine} | DATABASE_URL configured: {db_url_present}")
+
         try:
             db.create_all()
             check_and_migrate_db()
@@ -388,11 +400,15 @@ def initialize_database_lazily():
                 db.session.rollback()
             except Exception:
                 pass
-            print(f"Primary DB initialization warning ({e}). Falling back to SQLite...")
-            try:
-                switch_to_sqlite()
-            except Exception as e2:
-                print(f"SQLite fallback failed: {e2}")
+
+            if is_production:
+                print(f"[DB INITIALIZATION WARNING] Production PostgreSQL initialization note ({e}). Maintaining PostgreSQL engine (no fallback).")
+            else:
+                print(f"[DB INITIALIZATION WARNING] Local DB initialization note ({e}). Falling back to SQLite...")
+                try:
+                    switch_to_sqlite()
+                except Exception as e2:
+                    print(f"Local SQLite fallback failed: {e2}")
         finally:
             _db_initialized = True
 
@@ -3754,17 +3770,24 @@ def get_google_sheets_config():
         return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
 
     try:
-        db.create_all()
         cfg = get_active_google_sheets_config()
-        if not cfg:
-            cfg = GoogleSheetsConfig(spreadsheet_id='', is_active=True, auto_sync_enabled=True, last_status='Not Configured')
-            db.session.add(cfg)
-            db.session.commit()
-
         is_configured, status_msg = is_google_sheets_configured()
         sa_present = bool(get_service_account_info())
 
-        res_data = cfg.to_dict()
+        if cfg:
+            res_data = cfg.to_dict()
+        else:
+            res_data = {
+                'id': None,
+                'spreadsheet_id': '',
+                'is_active': True,
+                'auto_sync_enabled': True,
+                'last_status': 'Not Configured',
+                'error_message': '',
+                'created_at': '',
+                'updated_at': ''
+            }
+
         res_data['is_configured'] = is_configured
         res_data['status_message'] = status_msg
         res_data['service_account_configured'] = sa_present
