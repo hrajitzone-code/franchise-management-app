@@ -20,16 +20,10 @@ from models import (
     db, Franchise, Lead, CallHistory, FollowUp, TokenRecord, SurveyVersion, Payment,
     BrandingSetup, MarketingCampaign, TrainingRecord, StoreOperations, MaterialAsset,
     Purchase, GRReturn, ExpenseCategory, Expense, CompanySupport, Document, AuditLog,
-    ImportHistory, VisitExpense, User, Complaint, Role, InteriorSetup,
-    GoogleSheetsConfig, GoogleSheetsSyncLog
+    ImportHistory, VisitExpense, User, Complaint, Role, InteriorSetup
 )
 from services.report_service import generate_pdf_report, generate_excel_report, generate_word_report
 from services.storage_service import upload_file, get_file_url, is_supabase_configured
-from services.google_sheets_service import (
-    is_google_sheets_configured, get_service_account_info,
-    sync_record_to_sheet, sync_all_modules, retry_failed_syncs, get_gspread_client,
-    get_active_google_sheets_config
-)
 
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -487,7 +481,7 @@ def resolve_api_module_and_action(path, method):
     else:
         action = 'view'
 
-    if path.startswith('/api/users') or path.startswith('/api/roles') or path.startswith('/api/system/health') or path.startswith('/api/google_sheets') or path.startswith('/api/seed_demo_data'):
+    if path.startswith('/api/users') or path.startswith('/api/roles') or path.startswith('/api/system/health') or path.startswith('/api/seed_demo_data'):
         return 'user_management', action
     elif path.startswith('/api/leads') or path.startswith('/api/franchise'):
         return 'leads', action
@@ -1372,10 +1366,6 @@ def manage_leads():
         )
         db.session.add(lead)
         db.session.commit()
-        try:
-            sync_record_to_sheet('leads', lead.to_dict(), action='CREATE')
-        except Exception as ex:
-            print(f"[GOOGLE SHEETS HOOK EXCEPTION] {ex}")
         log_audit(f_id or 1, 'Leads', 'CREATE', lead.assigned_person, 'Pre-Franchise Inquiry', None, lead.customer_name, f"Created Inquiry Lead: {lead.customer_name}")
         return jsonify({'status': 'success', 'lead': lead.to_dict()})
     
@@ -1416,10 +1406,6 @@ def update_delete_lead(l_id):
     lead.followup_date = data.get('followup_date', lead.followup_date)
     lead.remarks = data.get('remarks', lead.remarks)
     db.session.commit()
-    try:
-        sync_record_to_sheet('leads', lead.to_dict(), action='UPDATE')
-    except Exception as ex:
-        print(f"[GOOGLE SHEETS HOOK EXCEPTION] {ex}")
     log_audit(lead.franchise_id or 1, 'Leads', 'UPDATE', lead.assigned_person, 'Lead Record', None, lead.customer_name, f"Updated Lead #{l_id}")
     return jsonify({'status': 'success', 'lead': lead.to_dict()})
 
@@ -3587,9 +3573,6 @@ def get_system_health():
     engine_name = 'postgresql' if ('postgres' in db.engine.name.lower() or is_production) else 'sqlite'
     sup_configured = is_supabase_configured()
 
-    from services.google_sheets_service import is_google_sheets_configured
-    gs_configured, _ = is_google_sheets_configured()
-
     status_str = 'healthy' if db_connected else 'unhealthy'
 
     return jsonify({
@@ -3602,9 +3585,6 @@ def get_system_health():
         },
         'storage': {
             'provider': 'supabase' if sup_configured else 'local'
-        },
-        'google_sheets': {
-            'configured': gs_configured
         }
     }), (200 if db_connected else 503)
 
@@ -3970,259 +3950,6 @@ def delete_role(role_id):
     log_audit(None, 'User Management', 'Delete Role', current_user.full_name, old_value=name, remarks=f"Custom role '{name}' deleted.")
 
     return jsonify({'status': 'success', 'message': f'Role "{name}" deleted successfully!'})
-
-
-# --- GOOGLE SHEETS INTEGRATION APIs ---
-
-@app.route('/api/google_sheets/config', methods=['GET'])
-def get_google_sheets_config():
-    current_user = get_current_user()
-    if not current_user or current_user.role != 'Super Admin':
-        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
-
-    try:
-        cfg = get_active_google_sheets_config()
-        is_configured, status_msg = is_google_sheets_configured()
-        sa_present = bool(get_service_account_info())
-
-        if cfg:
-            res_data = cfg.to_dict()
-        else:
-            res_data = {
-                'id': None,
-                'spreadsheet_id': '',
-                'is_active': True,
-                'auto_sync_enabled': True,
-                'last_status': 'Not Configured',
-                'error_message': '',
-                'created_at': '',
-                'updated_at': ''
-            }
-
-        res_data['is_configured'] = is_configured
-        res_data['status_message'] = status_msg
-        res_data['service_account_configured'] = sa_present
-        return jsonify({'status': 'success', 'config': res_data})
-    except Exception as e:
-        db.session.rollback()
-        print(f"[GOOGLE SHEETS] Get Config Error: {e}")
-        return jsonify({'status': 'error', 'error': str(e), 'message': f'Failed to retrieve configuration: {str(e)}'}), 500
-
-
-@app.route('/api/google_sheets/config', methods=['POST'])
-def save_google_sheets_config():
-    current_user = get_current_user()
-    if not current_user or current_user.role != 'Super Admin':
-        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
-
-    try:
-        data = request.json or {}
-        spreadsheet_id = data.get('spreadsheet_id', '').strip()
-        is_active = data.get('is_active', True)
-        auto_sync_enabled = data.get('auto_sync_enabled', True)
-
-        cfg = get_active_google_sheets_config()
-        if not cfg:
-            cfg = GoogleSheetsConfig()
-            db.session.add(cfg)
-
-        cfg.spreadsheet_id = spreadsheet_id
-        cfg.is_active = bool(is_active)
-        cfg.auto_sync_enabled = bool(auto_sync_enabled)
-        cfg.updated_at = datetime.datetime.utcnow()
-
-        # Handle Service Account JSON text if provided
-        sa_json_text = data.get('service_account_json', '').strip()
-        if sa_json_text:
-            try:
-                parsed_json = json.loads(sa_json_text)
-                config_dir = os.path.join(BASE_DIR, 'config')
-                os.makedirs(config_dir, exist_ok=True)
-                sa_file_path = os.path.join(config_dir, 'google_service_account.json')
-                with open(sa_file_path, 'w', encoding='utf-8') as f:
-                    json.dump(parsed_json, f, indent=2)
-                print("[GOOGLE SHEETS] Successfully saved Service Account JSON to server config file.")
-            except OSError as os_err:
-                print(f"[GOOGLE SHEETS] Note: Filesystem is read-only ({os_err}). Please configure GOOGLE_SERVICE_ACCOUNT_JSON in Vercel environment variables.")
-            except Exception as e:
-                return jsonify({'status': 'error', 'error': str(e), 'message': f'Invalid Service Account JSON formatting: {e}'}), 400
-
-        db.session.commit()
-        log_audit(None, 'Google Sheets', 'Save Config', current_user.full_name, remarks=f"Updated Google Sheets config (Spreadsheet ID: {spreadsheet_id}).")
-
-        return jsonify({
-            'status': 'success',
-            'SUCCESS': True,
-            'message': 'Google Sheets configuration saved successfully!',
-            'config': cfg.to_dict()
-        })
-    except Exception as e:
-        db.session.rollback()
-        print(f"[GOOGLE SHEETS] Save Config Error: {e}")
-        return jsonify({'status': 'error', 'error': str(e), 'message': f'Failed to save configuration: {str(e)}'}), 500
-
-
-@app.route('/api/google_sheets/test', methods=['POST'])
-def test_google_sheets_connection():
-    current_user = get_current_user()
-    if not current_user or current_user.role != 'Super Admin':
-        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
-
-    is_configured, status_msg = is_google_sheets_configured()
-    if not is_configured:
-        return jsonify({'status': 'error', 'message': f'Connection test failed: {status_msg}'}), 400
-
-    cfg = get_active_google_sheets_config()
-    spreadsheet_id = (cfg.spreadsheet_id or '').strip() if cfg and cfg.spreadsheet_id else (os.environ.get('GOOGLE_SPREADSHEET_ID') or '').strip()
-
-    try:
-        gc = get_gspread_client()
-        sh = gc.open_by_key(spreadsheet_id)
-        title = sh.title
-        worksheets = [ws.title for ws in sh.worksheets()]
-
-        if cfg:
-            cfg.last_status = 'Connected'
-            cfg.error_message = None
-            db.session.commit()
-
-        log_audit(None, 'Google Sheets', 'Test Connection', current_user.full_name, remarks=f"Tested connection to '{title}' ({len(worksheets)} tabs).")
-
-        return jsonify({
-            'status': 'success',
-            'message': f"Connected successfully to Spreadsheet: '{title}'",
-            'spreadsheet_title': title,
-            'tabs_count': len(worksheets),
-            'worksheets': worksheets
-        })
-    except Exception as e:
-        err_str = str(e)
-        if cfg:
-            cfg.last_status = 'Error'
-            cfg.error_message = err_str
-            db.session.commit()
-        return jsonify({'status': 'error', 'message': f"Google Sheets connection failed: {err_str}"}), 500
-
-
-@app.route('/api/google_sheets/sync_all', methods=['POST'])
-def handle_google_sheets_sync_all():
-    current_user = get_current_user()
-    if not current_user or current_user.role != 'Super Admin':
-        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
-
-    success, message, count = sync_all_modules()
-    if success:
-        log_audit(None, 'Google Sheets', 'Sync All', current_user.full_name, remarks=message)
-        return jsonify({'status': 'success', 'message': message, 'synced_count': count})
-    else:
-        return jsonify({'status': 'error', 'message': message}), 500
-
-
-@app.route('/api/google_sheets/retry_failed', methods=['POST'])
-def handle_google_sheets_retry_failed():
-    current_user = get_current_user()
-    if not current_user or current_user.role != 'Super Admin':
-        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
-
-    success, message, count = retry_failed_syncs()
-    return jsonify({'status': 'success', 'message': message, 'retried_count': count})
-
-
-@app.route('/api/google_sheets/logs', methods=['GET'])
-def get_google_sheets_logs():
-    current_user = get_current_user()
-    if not current_user or current_user.role != 'Super Admin':
-        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
-
-    logs = GoogleSheetsSyncLog.query.order_by(GoogleSheetsSyncLog.created_at.desc()).limit(100).all()
-    return jsonify({
-        'status': 'success',
-        'logs': [l.to_dict() for l in logs]
-    })
-
-
-MODULE_MODEL_MAP = {
-    'leads': Lead,
-    'franchises': Franchise,
-    'followup': FollowUp,
-    'calling': CallHistory,
-    'token': TokenRecord,
-    'payments': Payment,
-    'expenses': Expense,
-    'visit_expenses': VisitExpense,
-    'purchases': Purchase,
-    'gr': GRReturn,
-    'training': TrainingRecord,
-    'interior': InteriorSetup,
-    'branding': BrandingSetup,
-    'marketing': MarketingCampaign,
-    'support': CompanySupport,
-    'materials': MaterialAsset,
-    'complaints': Complaint
-}
-
-
-@app.route('/api/google_sheets/sync_single', methods=['POST'])
-def handle_google_sheets_sync_single():
-    current_user = get_current_user()
-    if not current_user or current_user.role != 'Super Admin':
-        return jsonify({'error': 'Access denied. Super Admin permissions required.'}), 403
-
-    try:
-        data = request.json or {}
-        module_key = str(data.get('module', 'leads')).strip().lower()
-        record_id_raw = data.get('record_id')
-
-        if not record_id_raw:
-            return jsonify({'status': 'error', 'message': 'Record ID is required for test sync.'}), 400
-
-        try:
-            record_id = int(record_id_raw)
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Invalid Record ID format. Integer expected.'}), 400
-
-        model_cls = MODULE_MODEL_MAP.get(module_key)
-        if not model_cls:
-            return jsonify({'status': 'error', 'message': f"Unsupported module '{module_key}'."}), 400
-
-        record = model_cls.query.get(record_id)
-        if not record:
-            return jsonify({'status': 'error', 'message': f"Record ID {record_id} not found in module '{module_key}'."}), 404
-
-        if not hasattr(record, 'to_dict'):
-            return jsonify({'status': 'error', 'message': f"Model for module '{module_key}' missing to_dict method."}), 500
-
-        record_dict = record.to_dict()
-        success, message = sync_record_to_sheet(module_key, record_dict, action='SINGLE_TEST')
-
-        from services.google_sheets_service import MODULE_TAB_MAPPING
-        tab_name = MODULE_TAB_MAPPING.get(module_key, module_key.capitalize())
-
-        if success:
-            log_audit(None, 'Google Sheets', 'Single Sync Test', current_user.full_name, remarks=f"Synced single record {module_key}:{record_id} to sheet tab '{tab_name}'.")
-            return jsonify({
-                'status': 'success',
-                'SUCCESS': True,
-                'message': f"Successfully synced record ID {record_id} to tab '{tab_name}'.",
-                'module': module_key,
-                'record_id': record_id,
-                'tab_name': tab_name,
-                'detail': message
-            })
-        else:
-            return jsonify({
-                'status': 'error',
-                'message': f"Single record sync failed: {message}",
-                'module': module_key,
-                'record_id': record_id,
-                'tab_name': tab_name,
-                'error': message
-            }), 500
-
-    except Exception as e:
-        db.session.rollback()
-        print(f"[GOOGLE SHEETS SINGLE SYNC ERROR] {e}")
-        return jsonify({'status': 'error', 'error': str(e), 'message': f'Single record sync failed: {str(e)}'}), 500
 
 
 if __name__ == '__main__':

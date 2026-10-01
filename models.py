@@ -1074,56 +1074,7 @@ class Notification(db.Model):
             'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
         }
 
-class GoogleSheetsConfig(db.Model):
-    __tablename__ = 'google_sheets_config'
-    id = db.Column(db.Integer, primary_key=True)
-    spreadsheet_id = db.Column(db.String(255), nullable=True)
-    is_active = db.Column(db.Boolean, default=True)
-    auto_sync_enabled = db.Column(db.Boolean, default=True)
-    last_sync_at = db.Column(db.DateTime, nullable=True)
-    last_status = db.Column(db.String(50), default='Not Configured') # Connected, Syncing, Error, Disconnected
-    error_message = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'spreadsheet_id': self.spreadsheet_id or '',
-            'is_active': bool(self.is_active),
-            'auto_sync_enabled': bool(self.auto_sync_enabled),
-            'last_sync_at': self.last_sync_at.strftime('%Y-%m-%d %H:%M:%S') if self.last_sync_at else '',
-            'last_status': self.last_status or 'Not Configured',
-            'error_message': self.error_message or '',
-            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
-        }
-
-class GoogleSheetsSyncLog(db.Model):
-    __tablename__ = 'google_sheets_sync_logs'
-    id = db.Column(db.Integer, primary_key=True)
-    module_name = db.Column(db.String(100), nullable=False)
-    record_id = db.Column(db.Integer, nullable=False)
-    composite_id = db.Column(db.String(100), nullable=True) # e.g. LEAD:1
-    action = db.Column(db.String(50), default='SYNC') # CREATE, UPDATE, DELETE, SYNC_ALL
-    status = db.Column(db.String(50), default='PENDING') # SUCCESS, FAILED, PENDING
-    attempts = db.Column(db.Integer, default=1)
-    error_message = db.Column(db.Text, nullable=True)
-    payload_json = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'module_name': self.module_name,
-            'record_id': self.record_id,
-            'composite_id': self.composite_id or f"{self.module_name.upper()}:{self.record_id}",
-            'action': self.action,
-            'status': self.status,
-            'attempts': self.attempts,
-            'error_message': self.error_message or '',
-            'created_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else ''
-        }
 
 
 
