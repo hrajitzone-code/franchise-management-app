@@ -465,6 +465,22 @@ def add_cache_control_headers(response):
         response.headers['Expires'] = '0'
     return response
 
+@app.errorhandler(500)
+def handle_500_error(e):
+    try:
+        db.session.rollback()
+    except Exception:
+        pass
+    err_str = str(e)
+    print(f"[GLOBAL 500 HANDLER] Unhandled application error: {err_str}")
+    if request.path.startswith('/api/'):
+        is_db_err = any(k in err_str for k in ['psycopg2', 'OperationalError', 'invalid_prod_db_placeholder', 'Name or service not known', 'Connection'])
+        return jsonify({
+            'status': 'error',
+            'message': 'Production database temporarily unavailable' if is_db_err else 'Internal application error.'
+        }), (503 if is_db_err else 500)
+    return render_template('index.html')
+
 def resolve_api_module_and_action(path, method):
     if '/approve' in path or '/convert_to_franchise' in path:
         action = 'approve'
