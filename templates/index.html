@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Coral BIOS - Franchise Management Software</title>
+  <title>Franchise OS - Franchise Management Software</title>
   <!-- Google Fonts & FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="/static/css/style.css?v=20260919_v15">
+  <link rel="stylesheet" href="/static/css/style.css?v=20261001_v1">
 </head>
 <body>
 
-<!-- Full-Screen Login Screen (Bypassed - Direct Access Enabled) -->
-<div id="login-screen" style="display: none; position: fixed; inset: 0; background: linear-gradient(135deg, #0B2545 0%, #133B70 100%); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
+<!-- Full-Screen Login Screen -->
+<div id="login-screen" style="display: flex; position: fixed; inset: 0; background: linear-gradient(135deg, #0B2545 0%, #133B70 100%); z-index: 9999; align-items: center; justify-content: center; padding: 20px;">
   <div style="background: #FFFFFF; width: 440px; max-width: 100%; border-radius: 16px; padding: 35px 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.4);">
     <div style="text-align: center; margin-bottom: 25px;">
-      <div style="display: inline-flex; align-items: center; justify-content: center; width: 100%; margin-bottom: 14px;">
-        <img src="/static/images/coral_bios_logo.png" alt="Coral BIOS" style="height: 54px; object-fit: contain;">
+      <div style="display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; background: rgba(0, 153, 255, 0.1); border-radius: 14px; margin-bottom: 14px; color: #0099FF; font-size: 1.6rem;">
+        <i class="fa-solid fa-layer-group"></i>
       </div>
-      <h2 style="margin: 0 0 6px 0; color: #0F2B5C; font-weight: 700; font-size: 1.4rem;">Coral BIOS Login</h2>
+      <h2 style="margin: 0 0 6px 0; color: #0F2B5C; font-weight: 800; font-size: 1.5rem; letter-spacing: -0.3px;">Franchise <span style="color: #0099FF;">OS</span></h2>
       <p style="margin: 0; color: #64748B; font-size: 0.85rem;">Sign in to access your authorized workspace</p>
     </div>
 
@@ -51,16 +51,18 @@
   </div>
 </div>
 
-<div id="app-container" style="display: flex;">
+<div id="app-container" style="display: none;">
 
   <!-- Sidebar Navigation -->
   <aside id="sidebar">
     <div class="brand">
       <div class="brand-left" style="display: flex; align-items: center; gap: 10px;">
-        <img src="/static/images/coral_bios_logo.png" alt="Coral BIOS" style="height: 34px; background: #FFFFFF; padding: 2px 6px; border-radius: 6px; object-fit: contain;">
+        <div style="display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(56, 189, 248, 0.15); border-radius: 8px; color: #38BDF8; font-size: 1.1rem;">
+          <i class="fa-solid fa-layer-group"></i>
+        </div>
         <div style="display: flex; flex-direction: column;" class="brand-text-container">
-          <span class="brand-name" style="font-weight: 700; font-size: 1.05rem; color: #FFFFFF; letter-spacing: -0.2px;">Coral <span style="color: #38BDF8;">BIOS</span></span>
-          <span style="font-size: 0.55rem; color: #94A3B8; font-weight: 600; letter-spacing: 0.4px;">TECHNOLOGY | SOLUTIONS</span>
+          <span class="brand-name" style="font-weight: 700; font-size: 1.05rem; color: #FFFFFF; letter-spacing: -0.2px;">Franchise <span style="color: #38BDF8;">OS</span></span>
+          <span style="font-size: 0.55rem; color: #94A3B8; font-weight: 600; letter-spacing: 0.4px;">MANAGEMENT SYSTEM</span>
         </div>
       </div>
       <button id="sidebar-toggle-btn" class="sidebar-toggle-btn" onclick="toggleSidebar()" title="Collapse Sidebar">
@@ -230,8 +232,8 @@
       <div class="user-info-wrapper">
         <i class="fa-solid fa-circle-user user-avatar-icon"></i>
         <div class="user-details-text">
-          <span id="current-user-fullname" class="user-fullname">Guest User</span>
-          <span id="current-role-badge" class="role-badge">Role</span>
+          <span id="current-user-fullname" class="user-fullname"></span>
+          <span id="current-role-badge" class="role-badge"></span>
         </div>
       </div>
       <button onclick="handleLogout()" class="btn-sidebar-logout" title="Logout Session">
@@ -1571,6 +1573,6 @@
   </div>
 </div>
 
-<script src="/static/js/app.js?v=20260917_v14"></script>
+<script src="/static/js/app.js?v=20260929_v19"></script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 // Global State Management
-let currentRole = 'Admin';
+let currentRole = null;
 let currentUserPermissions = {};
 let activeFranchiseId = null;
 let currentProfileTab = 'overview';
@@ -10,61 +10,101 @@ let expenseCategoriesList = [];
 let allFranchisesList = [];
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Clear any legacy service worker registrations or Cache Storage entries
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      for (let reg of regs) reg.unregister();
+    }).catch(() => {});
+  }
+  if ('caches' in window) {
+    caches.keys().then(names => {
+      for (let name of names) caches.delete(name);
+    }).catch(() => {});
+  }
+
   checkAuthSession();
   restoreSidebarState();
   initEventListeners();
 });
 
-async function checkAuthSession() {
-  const loginScreen = document.getElementById('login-screen');
-  const appContainer = document.getElementById('app-container');
-  if (loginScreen) loginScreen.style.display = 'none';
-  if (appContainer) appContainer.style.display = 'flex';
-
-  try {
-    const res = await fetch('/api/auth/me');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.user) {
-        currentRole = data.user.role || 'Super Admin';
-        currentUserPermissions = data.user.permissions || {};
-        
-        const roleBadge = document.getElementById('current-role-badge');
-        if (roleBadge) roleBadge.innerText = currentRole;
-
-        const roleSelect = document.getElementById('topbar-role-select');
-        if (roleSelect) roleSelect.value = currentRole;
-        
-        const userFullname = document.getElementById('current-user-fullname');
-        if (userFullname) userFullname.innerText = data.user.full_name || 'Sakshi Shukla';
-
-        const topUserFullname = document.getElementById('top-user-fullname');
-        if (topUserFullname) topUserFullname.innerText = data.user.full_name || 'Sakshi Shukla';
-
-        const topUserRole = document.getElementById('top-user-role');
-        if (topUserRole) topUserRole.innerText = currentRole;
-
-        const initials = (data.user.full_name || 'Sakshi Shukla').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-        const topAvatar = document.getElementById('top-avatar-circle');
-        if (topAvatar) topAvatar.innerText = initials || 'SS';
-
-        const nameEl = document.getElementById('dash-greeting-title');
-        if (nameEl) {
-          const firstName = (data.user.full_name || 'Sakshi').split(' ')[0];
-          nameEl.innerText = `Good Morning, ${firstName}!`;
-        }
-
-        applySidebarPermissions(currentUserPermissions, currentRole);
-        loadDashboard();
-        return;
-      }
+function updateUserUIBadges(user) {
+  if (!user) return;
+  const currentRoleName = user.role || 'Super Admin';
+  const nameEl = document.getElementById('current-user-fullname');
+  const roleEl = document.getElementById('current-role-badge');
+  if (nameEl) nameEl.innerText = user.full_name || 'System Admin';
+  if (roleEl) {
+    roleEl.innerText = currentRoleName;
+    if (currentRoleName === 'Super Admin') {
+      roleEl.style.background = '#FEF3C7';
+      roleEl.style.color = '#92400E';
+      roleEl.style.border = '1px solid #FCD34D';
+    } else {
+      roleEl.style.background = '#DBEAFE';
+      roleEl.style.color = '#1E40AF';
+      roleEl.style.border = '1px solid #93C5FD';
     }
-  } catch (err) {
-    console.error('Session init info:', err);
   }
 
-  currentRole = 'Super Admin';
-  loadDashboard();
+  const roleSelect = document.getElementById('topbar-role-select');
+  if (roleSelect) roleSelect.value = currentRoleName;
+
+  const topUserFullname = document.getElementById('top-user-fullname');
+  if (topUserFullname) topUserFullname.innerText = user.full_name || 'User';
+
+  const topUserRole = document.getElementById('top-user-role');
+  if (topUserRole) topUserRole.innerText = currentRoleName;
+
+  const initials = (user.full_name || 'User').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  const topAvatar = document.getElementById('top-avatar-circle');
+  if (topAvatar) topAvatar.innerText = initials || 'U';
+
+  const greetingEl = document.getElementById('dash-greeting-title');
+  if (greetingEl) {
+    const firstName = (user.full_name || 'User').split(' ')[0];
+    greetingEl.innerText = `Good Morning, ${firstName}!`;
+  }
+}
+
+async function checkAuthSession(retryCount = 0) {
+  const loginScreen = document.getElementById('login-screen');
+  const appContainer = document.getElementById('app-container');
+
+  try {
+    const res = await fetch('/api/auth/me', {
+      credentials: 'same-origin',
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+    });
+
+    if (res.status === 200) {
+      const data = await res.json();
+      if (data.authenticated && data.user) {
+        currentUser = data.user;
+        currentRole = data.user.role || 'Super Admin';
+        currentUserPermissions = data.user.permissions || {};
+
+        if (loginScreen) loginScreen.style.display = 'none';
+        if (appContainer) appContainer.style.display = 'flex';
+
+        updateUserUIBadges(data.user);
+        try { applySidebarPermissions(currentUserPermissions, currentRole); } catch(e) {}
+        try { loadDashboard(); } catch(e) {}
+        return true;
+      }
+    } else if (res.status === 503 && retryCount < 2) {
+      await new Promise(r => setTimeout(r, 400));
+      return await checkAuthSession(retryCount + 1);
+    }
+  } catch (err) {
+    console.error('Session init error:', err);
+    if (retryCount < 2) {
+      await new Promise(r => setTimeout(r, 400));
+      return await checkAuthSession(retryCount + 1);
+    }
+  }
+
+  showLoginScreen();
+  return false;
 }
 
 async function handleTestRoleChange(newRole) {
@@ -91,9 +131,9 @@ async function handleTestRoleChange(newRole) {
       const topUserRole = document.getElementById('top-user-role');
       if (topUserRole) topUserRole.innerText = currentRole;
 
-      const initials = (data.user.full_name || 'Sakshi Shukla').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+      const initials = (data.user.full_name || 'User').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
       const topAvatar = document.getElementById('top-avatar-circle');
-      if (topAvatar) topAvatar.innerText = initials || 'SS';
+      if (topAvatar) topAvatar.innerText = initials || 'U';
 
       const roleSelect = document.getElementById('topbar-role-select');
       if (roleSelect) roleSelect.value = currentRole;
@@ -104,13 +144,6 @@ async function handleTestRoleChange(newRole) {
   } catch (err) {
     console.error('Failed to switch test role:', err);
   }
-}
-
-async function handleLogout() {
-  try {
-    await fetch('/api/auth/logout', { method: 'POST' });
-  } catch (e) {}
-  loadDashboard();
 }
 
 function applySidebarPermissions(userPermissions, userRole) {
@@ -3822,43 +3855,18 @@ async function deleteRole(roleId) {
 
 let currentUser = null;
 
-async function checkAuthSession() {
-  const loginScreen = document.getElementById('login-screen');
-  const appContainer = document.getElementById('app-container');
-  if (loginScreen) loginScreen.style.display = 'none';
-  if (appContainer) appContainer.style.display = 'flex';
-
-  try {
-    const res = await fetch('/api/auth/me', { credentials: 'same-origin' });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.user) {
-        currentUser = data.user;
-        currentRole = data.user.role || 'Super Admin';
-        currentUserPermissions = data.user.permissions || {};
-        
-        const nameEl = document.getElementById('current-user-fullname');
-        const roleEl = document.getElementById('current-role-badge');
-        if (nameEl) nameEl.innerText = currentUser.full_name || 'System Admin';
-        if (roleEl) roleEl.innerText = currentRole;
-        
-        const roleSelect = document.getElementById('topbar-role-select');
-        if (roleSelect) roleSelect.value = currentRole;
-
-        applySidebarPermissions(currentUserPermissions, currentRole);
-      }
-    }
-  } catch (err) {
-    console.error('Session init info:', err);
-  }
-}
-
 function showLoginScreen() {
   currentUser = null;
   const loginScreen = document.getElementById('login-screen');
   const appContainer = document.getElementById('app-container');
   if (loginScreen) loginScreen.style.display = 'flex';
   if (appContainer) appContainer.style.display = 'none';
+
+  const errorAlert = document.getElementById('login-error-alert');
+  if (errorAlert) {
+    errorAlert.innerText = '';
+    errorAlert.style.display = 'none';
+  }
 }
 
 async function handleLoginSubmit(e) {

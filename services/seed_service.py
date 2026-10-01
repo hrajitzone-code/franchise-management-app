@@ -41,7 +41,7 @@ def run_seed_all():
     # 3. Seed Standard Users with Demo Logins
     demo_users = [
         {
-            "username": "admin@coralbios.com",
+            "username": "admin@franchiseos.com",
             "full_name": "Super Admin",
             "mobile": "+91 9876543210",
             "role": "Super Admin",
@@ -50,7 +50,7 @@ def run_seed_all():
             "password": "Admin@123"
         },
         {
-            "username": "manager@coralbios.com",
+            "username": "manager@franchiseos.com",
             "full_name": "General Manager",
             "mobile": "+91 9876543211",
             "role": "Admin",
@@ -59,7 +59,7 @@ def run_seed_all():
             "password": "Admin@123"
         },
         {
-            "username": "executive@coralbios.com",
+            "username": "executive@franchiseos.com",
             "full_name": "Rajesh Singh",
             "mobile": "+91 9876543212",
             "role": "Field Executive",
@@ -68,7 +68,7 @@ def run_seed_all():
             "password": "Exec@123"
         },
         {
-            "username": "accountant@coralbios.com",
+            "username": "accountant@franchiseos.com",
             "full_name": "Priya Nair",
             "mobile": "+91 9876543213",
             "role": "Accountant",
@@ -77,7 +77,7 @@ def run_seed_all():
             "password": "Acc@123"
         },
         {
-            "username": "franchisee@coralbios.com",
+            "username": "franchisee@franchiseos.com",
             "full_name": "Amit Singh (Mumbai Hub)",
             "mobile": "+91 9876543214",
             "role": "Franchisee",
@@ -86,7 +86,7 @@ def run_seed_all():
             "password": "Fran@123"
         },
         {
-            "username": "ananya.sharma@coralbios.com",
+            "username": "ananya.sharma@franchiseos.com",
             "full_name": "Ananya Sharma",
             "mobile": "+91 9876543215",
             "role": "Field Executive",
@@ -95,7 +95,7 @@ def run_seed_all():
             "password": "Exec@123"
         },
         {
-            "username": "vikram.singh@coralbios.com",
+            "username": "vikram.singh@franchiseos.com",
             "full_name": "Vikram Singh",
             "mobile": "+91 9876543216",
             "role": "Manager",
@@ -104,7 +104,7 @@ def run_seed_all():
             "password": "Admin@123"
         },
         {
-            "username": "pankaj.patel@coralbios.com",
+            "username": "pankaj.patel@franchiseos.com",
             "full_name": "Pankaj Patel",
             "mobile": "+91 9876543217",
             "role": "Franchisee",
@@ -131,16 +131,16 @@ def run_seed_all():
 
     db.session.commit()
 
-    # 4. Seed Franchises (8+ Core Franchises with "Coral Bios" Branding)
+    # 4. Seed Franchises (8+ Core Franchises with "Franchise OS" Branding)
     sample_franchises = [
-        {"code": "FR-MUMBAI", "name": "Coral Bios - Mumbai Hub", "owner_name": "Amit Singh", "owner_mobile": "+91 9820011223", "owner_email": "amit.mumbai@coralbios.com", "city": "Mumbai", "state": "Maharashtra", "assigned_person": "Vikram Singh", "plan_name": "Plan B (Standard)", "status": "Active", "agreed_amount": 500000.0},
-        {"code": "FR-DELHI", "name": "Coral Bios - Delhi Central", "owner_name": "Vikram Yadav", "owner_mobile": "+91 9811022334", "owner_email": "vikram.delhi@coralbios.com", "city": "Delhi", "state": "NCR", "assigned_person": "Vikram Singh", "plan_name": "Plan C (Master)", "status": "Active", "agreed_amount": 1000000.0},
-        {"code": "FR-BANGALORE", "name": "Coral Bios - Bengaluru South", "owner_name": "Kavita Shah", "owner_mobile": "+91 9845033445", "owner_email": "kavita.blr@coralbios.com", "city": "Bengaluru", "state": "Karnataka", "assigned_person": "Ananya Sharma", "plan_name": "Plan B (Standard)", "status": "Setup", "agreed_amount": 500000.0},
-        {"code": "FR-SURAT", "name": "Coral Bios - Surat Prime", "owner_name": "Rajesh Shah", "owner_mobile": "+91 9825012345", "owner_email": "rajesh.surat@coralbios.com", "city": "Surat", "state": "Gujarat", "assigned_person": "Rajesh Singh", "plan_name": "Plan B (Standard)", "status": "Active", "agreed_amount": 500000.0},
-        {"code": "FR-AHMEDABAD", "name": "Coral Bios - Ahmedabad West", "owner_name": "Pankaj Patel", "owner_mobile": "+91 9879012345", "owner_email": "pankaj.ahmedabad@coralbios.com", "city": "Ahmedabad", "state": "Gujarat", "assigned_person": "Ananya Sharma", "plan_name": "Plan C (Master)", "status": "Pending", "agreed_amount": 800000.0},
-        {"code": "FR-PUNE", "name": "Coral Bios - Pune City", "owner_name": "Deepak Joshi", "owner_mobile": "+91 9822055667", "owner_email": "deepak.pune@coralbios.com", "city": "Pune", "state": "Maharashtra", "assigned_person": "Rajesh Singh", "plan_name": "Plan A (Express)", "status": "Active", "agreed_amount": 300000.0},
-        {"code": "FR-JAIPUR", "name": "Coral Bios - Jaipur Station", "owner_name": "Manish Sharma", "owner_mobile": "+91 9414012345", "owner_email": "manish.jaipur@coralbios.com", "city": "Jaipur", "state": "Rajasthan", "assigned_person": "Vikram Singh", "plan_name": "Plan B (Standard)", "status": "Active", "agreed_amount": 550000.0},
-        {"code": "FR-INDORE", "name": "Coral Bios - Indore Square", "owner_name": "Vijay Chouhan", "owner_mobile": "+91 9826012345", "owner_email": "vijay.indore@coralbios.com", "city": "Indore", "state": "Madhya Pradesh", "assigned_person": "Rajesh Singh", "plan_name": "Plan A (Express)", "status": "Active", "agreed_amount": 320000.0}
+        {"code": "FR-MUMBAI", "name": "Franchise OS - Mumbai Hub", "owner_name": "Amit Singh", "owner_mobile": "+91 9820011223", "owner_email": "amit.mumbai@franchiseos.com", "city": "Mumbai", "state": "Maharashtra", "assigned_person": "Vikram Singh", "plan_name": "Plan B (Standard)", "status": "Active", "agreed_amount": 500000.0},
+        {"code": "FR-DELHI", "name": "Franchise OS - Delhi Central", "owner_name": "Vikram Yadav", "owner_mobile": "+91 9811022334", "owner_email": "vikram.delhi@franchiseos.com", "city": "Delhi", "state": "NCR", "assigned_person": "Vikram Singh", "plan_name": "Plan C (Master)", "status": "Active", "agreed_amount": 1000000.0},
+        {"code": "FR-BANGALORE", "name": "Franchise OS - Bengaluru South", "owner_name": "Kavita Shah", "owner_mobile": "+91 9845033445", "owner_email": "kavita.blr@franchiseos.com", "city": "Bengaluru", "state": "Karnataka", "assigned_person": "Ananya Sharma", "plan_name": "Plan B (Standard)", "status": "Setup", "agreed_amount": 500000.0},
+        {"code": "FR-SURAT", "name": "Franchise OS - Surat Prime", "owner_name": "Rajesh Shah", "owner_mobile": "+91 9825012345", "owner_email": "rajesh.surat@franchiseos.com", "city": "Surat", "state": "Gujarat", "assigned_person": "Rajesh Singh", "plan_name": "Plan B (Standard)", "status": "Active", "agreed_amount": 500000.0},
+        {"code": "FR-AHMEDABAD", "name": "Franchise OS - Ahmedabad West", "owner_name": "Pankaj Patel", "owner_mobile": "+91 9879012345", "owner_email": "pankaj.ahmedabad@franchiseos.com", "city": "Ahmedabad", "state": "Gujarat", "assigned_person": "Ananya Sharma", "plan_name": "Plan C (Master)", "status": "Pending", "agreed_amount": 800000.0},
+        {"code": "FR-PUNE", "name": "Franchise OS - Pune City", "owner_name": "Deepak Joshi", "owner_mobile": "+91 9822055667", "owner_email": "deepak.pune@franchiseos.com", "city": "Pune", "state": "Maharashtra", "assigned_person": "Rajesh Singh", "plan_name": "Plan A (Express)", "status": "Active", "agreed_amount": 300000.0},
+        {"code": "FR-JAIPUR", "name": "Franchise OS - Jaipur Station", "owner_name": "Manish Sharma", "owner_mobile": "+91 9414012345", "owner_email": "manish.jaipur@franchiseos.com", "city": "Jaipur", "state": "Rajasthan", "assigned_person": "Vikram Singh", "plan_name": "Plan B (Standard)", "status": "Active", "agreed_amount": 550000.0},
+        {"code": "FR-INDORE", "name": "Franchise OS - Indore Square", "owner_name": "Vijay Chouhan", "owner_mobile": "+91 9826012345", "owner_email": "vijay.indore@franchiseos.com", "city": "Indore", "state": "Madhya Pradesh", "assigned_person": "Rajesh Singh", "plan_name": "Plan A (Express)", "status": "Active", "agreed_amount": 320000.0}
     ]
 
     fran_objs = {}
@@ -161,18 +161,18 @@ def run_seed_all():
         {"customer_name": "Rohan Mehta", "mobile": "+91 9824098765", "email": "rohan.mehta@gmail.com", "city": "Surat", "state": "Gujarat", "location": "Ring Road Market", "source": "Website", "status": "Interested", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 5-7 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-09-01"},
         {"customer_name": "Neha Patel", "mobile": "+91 9879123456", "email": "neha.patel@yahoo.com", "city": "Ahmedabad", "state": "Gujarat", "location": "SG Highway", "source": "Social Media", "status": "Site Visit", "assigned_person": "Ananya Sharma", "plan_discussed": "Plan C (Master)", "investment_capacity": "Rs. 10 Lakhs+", "shop_availability": "Looking for Property", "inquiry_date": "2026-09-02"},
         {"customer_name": "Priya Sharma", "mobile": "+91 9820112233", "email": "priya.sharma@hotmail.com", "city": "Mumbai", "state": "Maharashtra", "location": "Andheri West", "source": "Referral", "status": "Token Received", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan A (Express)", "investment_capacity": "Rs. 3-5 Lakhs", "shop_availability": "Rented", "inquiry_date": "2026-09-03"},
-        {"customer_name": "Amit Singh", "mobile": "+91 9820011223", "email": "amit.mumbai@coralbios.com", "city": "Mumbai", "state": "Maharashtra", "location": "Bandra Kurla Complex", "source": "Website", "status": "Converted", "assigned_person": "Vikram Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 6 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-08-15", "franchise_id": fran_objs.get("FR-MUMBAI").id if "FR-MUMBAI" in fran_objs else None},
+        {"customer_name": "Amit Singh", "mobile": "+91 9820011223", "email": "amit.mumbai@franchiseos.com", "city": "Mumbai", "state": "Maharashtra", "location": "Bandra Kurla Complex", "source": "Website", "status": "Converted", "assigned_person": "Vikram Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 6 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-08-15", "franchise_id": fran_objs.get("FR-MUMBAI").id if "FR-MUMBAI" in fran_objs else None},
         {"customer_name": "Pooja Verma", "mobile": "+91 9827033445", "email": "pooja.verma@gmail.com", "city": "Indore", "state": "Madhya Pradesh", "location": "Vijay Nagar", "source": "Advertisement", "status": "Follow-up", "assigned_person": "Ananya Sharma", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 5 Lakhs", "shop_availability": "Available", "inquiry_date": "2026-09-04"},
         {"customer_name": "Rahul Joshi", "mobile": "+91 9826044556", "email": "rahul.joshi@rediffmail.com", "city": "Bhopal", "state": "Madhya Pradesh", "location": "MP Nagar Zone 1", "source": "Exhibition", "status": "Negotiation", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan A (Express)", "investment_capacity": "Rs. 4 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-09-05"},
         {"customer_name": "Anjali Gupta", "mobile": "+91 9414055667", "email": "anjali.gupta@gmail.com", "city": "Jaipur", "state": "Rajasthan", "location": "Malviya Nagar", "source": "Website", "status": "New", "assigned_person": "Ananya Sharma", "plan_discussed": "Plan C (Master)", "investment_capacity": "Rs. 8-10 Lakhs", "shop_availability": "Looking for Property", "inquiry_date": "2026-09-18"},
-        {"customer_name": "Vikram Yadav", "mobile": "+91 9811022334", "email": "vikram.delhi@coralbios.com", "city": "Delhi", "state": "NCR", "location": "Connaught Place", "source": "Referral", "status": "Converted", "assigned_person": "Vikram Singh", "plan_discussed": "Plan C (Master)", "investment_capacity": "Rs. 12 Lakhs", "shop_availability": "Rented", "inquiry_date": "2026-08-10", "franchise_id": fran_objs.get("FR-DELHI").id if "FR-DELHI" in fran_objs else None},
+        {"customer_name": "Vikram Yadav", "mobile": "+91 9811022334", "email": "vikram.delhi@franchiseos.com", "city": "Delhi", "state": "NCR", "location": "Connaught Place", "source": "Referral", "status": "Converted", "assigned_person": "Vikram Singh", "plan_discussed": "Plan C (Master)", "investment_capacity": "Rs. 12 Lakhs", "shop_availability": "Rented", "inquiry_date": "2026-08-10", "franchise_id": fran_objs.get("FR-DELHI").id if "FR-DELHI" in fran_objs else None},
         {"customer_name": "Suresh Kumar", "mobile": "+91 9849066778", "email": "suresh.kumar@yahoo.in", "city": "Hyderabad", "state": "Telangana", "location": "Banjara Hills", "source": "Social Media", "status": "Follow-up", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 5-6 Lakhs", "shop_availability": "Available", "inquiry_date": "2026-09-06"},
-        {"customer_name": "Kavita Shah", "mobile": "+91 9845033445", "email": "kavita.blr@coralbios.com", "city": "Bengaluru", "state": "Karnataka", "location": "Indiranagar 100ft Road", "source": "Website", "status": "Converted", "assigned_person": "Ananya Sharma", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 6 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-08-20", "franchise_id": fran_objs.get("FR-BANGALORE").id if "FR-BANGALORE" in fran_objs else None},
-        {"customer_name": "Manish Sharma", "mobile": "+91 9414012345", "email": "manish.jaipur@coralbios.com", "city": "Jaipur", "state": "Rajasthan", "location": "MI Road Market", "source": "Existing Customer", "status": "Converted", "assigned_person": "Vikram Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 5.5 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-08-12", "franchise_id": fran_objs.get("FR-JAIPUR").id if "FR-JAIPUR" in fran_objs else None},
-        {"customer_name": "Rajesh Shah", "mobile": "+91 9825012345", "email": "rajesh.surat@coralbios.com", "city": "Surat", "state": "Gujarat", "location": "Ghod Dod Road", "source": "Referral", "status": "Converted", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 5 Lakhs", "shop_availability": "Available", "inquiry_date": "2026-08-01", "franchise_id": fran_objs.get("FR-SURAT").id if "FR-SURAT" in fran_objs else None},
-        {"customer_name": "Pankaj Patel", "mobile": "+91 9879012345", "email": "pankaj.ahmedabad@coralbios.com", "city": "Ahmedabad", "state": "Gujarat", "location": "C.G. Road", "source": "Exhibition", "status": "Converted", "assigned_person": "Ananya Sharma", "plan_discussed": "Plan C (Master)", "investment_capacity": "Rs. 8 Lakhs", "shop_availability": "Rented", "inquiry_date": "2026-08-05", "franchise_id": fran_objs.get("FR-AHMEDABAD").id if "FR-AHMEDABAD" in fran_objs else None},
-        {"customer_name": "Deepak Joshi", "mobile": "+91 9822055667", "email": "deepak.pune@coralbios.com", "city": "Pune", "state": "Maharashtra", "location": "FC Road", "source": "Website", "status": "Converted", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan A (Express)", "investment_capacity": "Rs. 3.5 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-08-08", "franchise_id": fran_objs.get("FR-PUNE").id if "FR-PUNE" in fran_objs else None},
-        {"customer_name": "Vijay Chouhan", "mobile": "+91 9826012345", "email": "vijay.indore@coralbios.com", "city": "Indore", "state": "Madhya Pradesh", "location": "Sarafa Market", "source": "Advertisement", "status": "Converted", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan A (Express)", "investment_capacity": "Rs. 3.2 Lakhs", "shop_availability": "Available", "inquiry_date": "2026-08-02", "franchise_id": fran_objs.get("FR-INDORE").id if "FR-INDORE" in fran_objs else None},
+        {"customer_name": "Kavita Shah", "mobile": "+91 9845033445", "email": "kavita.blr@franchiseos.com", "city": "Bengaluru", "state": "Karnataka", "location": "Indiranagar 100ft Road", "source": "Website", "status": "Converted", "assigned_person": "Ananya Sharma", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 6 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-08-20", "franchise_id": fran_objs.get("FR-BANGALORE").id if "FR-BANGALORE" in fran_objs else None},
+        {"customer_name": "Manish Sharma", "mobile": "+91 9414012345", "email": "manish.jaipur@franchiseos.com", "city": "Jaipur", "state": "Rajasthan", "location": "MI Road Market", "source": "Existing Customer", "status": "Converted", "assigned_person": "Vikram Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 5.5 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-08-12", "franchise_id": fran_objs.get("FR-JAIPUR").id if "FR-JAIPUR" in fran_objs else None},
+        {"customer_name": "Rajesh Shah", "mobile": "+91 9825012345", "email": "rajesh.surat@franchiseos.com", "city": "Surat", "state": "Gujarat", "location": "Ghod Dod Road", "source": "Referral", "status": "Converted", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 5 Lakhs", "shop_availability": "Available", "inquiry_date": "2026-08-01", "franchise_id": fran_objs.get("FR-SURAT").id if "FR-SURAT" in fran_objs else None},
+        {"customer_name": "Pankaj Patel", "mobile": "+91 9879012345", "email": "pankaj.ahmedabad@franchiseos.com", "city": "Ahmedabad", "state": "Gujarat", "location": "C.G. Road", "source": "Exhibition", "status": "Converted", "assigned_person": "Ananya Sharma", "plan_discussed": "Plan C (Master)", "investment_capacity": "Rs. 8 Lakhs", "shop_availability": "Rented", "inquiry_date": "2026-08-05", "franchise_id": fran_objs.get("FR-AHMEDABAD").id if "FR-AHMEDABAD" in fran_objs else None},
+        {"customer_name": "Deepak Joshi", "mobile": "+91 9822055667", "email": "deepak.pune@franchiseos.com", "city": "Pune", "state": "Maharashtra", "location": "FC Road", "source": "Website", "status": "Converted", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan A (Express)", "investment_capacity": "Rs. 3.5 Lakhs", "shop_availability": "Owned Property", "inquiry_date": "2026-08-08", "franchise_id": fran_objs.get("FR-PUNE").id if "FR-PUNE" in fran_objs else None},
+        {"customer_name": "Vijay Chouhan", "mobile": "+91 9826012345", "email": "vijay.indore@franchiseos.com", "city": "Indore", "state": "Madhya Pradesh", "location": "Sarafa Market", "source": "Advertisement", "status": "Converted", "assigned_person": "Rajesh Singh", "plan_discussed": "Plan A (Express)", "investment_capacity": "Rs. 3.2 Lakhs", "shop_availability": "Available", "inquiry_date": "2026-08-02", "franchise_id": fran_objs.get("FR-INDORE").id if "FR-INDORE" in fran_objs else None},
         # Additional Leads to exceed 30+
         {"customer_name": "Gaurav Malhotra", "mobile": "+91 9810077889", "email": "gaurav.m@gmail.com", "city": "Delhi", "state": "NCR", "location": "South Ext Part 2", "source": "Website", "status": "Contacted", "assigned_person": "Vikram Singh", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 6 Lakhs", "shop_availability": "Looking for Property", "inquiry_date": "2026-09-10"},
         {"customer_name": "Sneha Roy", "mobile": "+91 9830088990", "email": "sneha.roy@gmail.com", "city": "Kolkata", "state": "West Bengal", "location": "Park Street", "source": "Social Media", "status": "New", "assigned_person": "Ananya Sharma", "plan_discussed": "Plan B (Standard)", "investment_capacity": "Rs. 5 Lakhs", "shop_availability": "Rented", "inquiry_date": "2026-09-12"},
@@ -208,7 +208,7 @@ def run_seed_all():
 
     # 6. Seed Calling History (25+ Call Logs)
     call_samples = [
-        {"lead_id": lead_objs[0].id if len(lead_objs)>0 else None, "customer_name": "Rohan Mehta", "caller_person": "Rajesh Singh", "discussion": "Introductory call regarding Coral Bios franchise options.", "requirement": "Looking for clothing retail format", "plan_discussed": "Plan B (Standard)", "objection": "Rental cost in Surat high", "next_followup_date": "2026-09-22", "status": "Interested"},
+        {"lead_id": lead_objs[0].id if len(lead_objs)>0 else None, "customer_name": "Rohan Mehta", "caller_person": "Rajesh Singh", "discussion": "Introductory call regarding Franchise OS franchise options.", "requirement": "Looking for clothing retail format", "plan_discussed": "Plan B (Standard)", "objection": "Rental cost in Surat high", "next_followup_date": "2026-09-22", "status": "Interested"},
         {"lead_id": lead_objs[1].id if len(lead_objs)>1 else None, "customer_name": "Neha Patel", "caller_person": "Ananya Sharma", "discussion": "Detailed ROI analysis and site location survey planning.", "requirement": "Prime mall location", "plan_discussed": "Plan C (Master)", "objection": "Requires 60% company support", "next_followup_date": "2026-09-23", "status": "Site Visit Scheduled"},
         {"lead_id": lead_objs[2].id if len(lead_objs)>2 else None, "customer_name": "Priya Sharma", "caller_person": "Rajesh Singh", "discussion": "Token payment received. Discussed interior setup timeline.", "requirement": "Quick launch within 30 days", "plan_discussed": "Plan A (Express)", "objection": "None", "next_followup_date": "2026-09-25", "status": "Token Received"},
         {"lead_id": lead_objs[4].id if len(lead_objs)>4 else None, "customer_name": "Pooja Verma", "caller_person": "Ananya Sharma", "discussion": "Followup on store footprint requirements and layout.", "requirement": "500 sqft front facing store", "plan_discussed": "Plan B (Standard)", "objection": "Evaluating competitor brand", "next_followup_date": "2026-09-21", "status": "Follow-up Needed"},
@@ -415,14 +415,14 @@ def run_seed_all():
     tasks_data = [
         {"title": "Review Site Visit PDF for Neha Patel (Ahmedabad)", "related_person_or_franchise": "Neha Patel", "module": "Survey & Site Visit", "due_date_time": "Today, 5:00 PM", "priority": "High", "is_completed": False},
         {"title": "Verify Token Payment Receipt Rs. 50,000 for Priya Sharma", "related_person_or_franchise": "Priya Sharma", "module": "Plans & Token", "due_date_time": "Today, 6:30 PM", "priority": "Urgent", "is_completed": False},
-        {"title": "Dispatch Opening Stock Inventory to Bengaluru South", "related_person_or_franchise": "Coral Bios - Bengaluru South", "module": "Purchase", "due_date_time": "Tomorrow, 11:00 AM", "priority": "High", "is_completed": False},
-        {"title": "Resolve Display Rack Delay Complaint #CMP-102", "related_person_or_franchise": "Coral Bios - Delhi Central", "module": "Complaints & Issues", "due_date_time": "Tomorrow, 2:00 PM", "priority": "Urgent", "is_completed": False},
-        {"title": "Schedule Staff Training Batch #05 for Surat Franchise", "related_person_or_franchise": "Coral Bios - Surat Prime", "module": "Operations", "due_date_time": "2026-09-22, 10:00 AM", "priority": "Medium", "is_completed": True},
+        {"title": "Dispatch Opening Stock Inventory to Bengaluru South", "related_person_or_franchise": "Franchise OS - Bengaluru South", "module": "Purchase", "due_date_time": "Tomorrow, 11:00 AM", "priority": "High", "is_completed": False},
+        {"title": "Resolve Display Rack Delay Complaint #CMP-102", "related_person_or_franchise": "Franchise OS - Delhi Central", "module": "Complaints & Issues", "due_date_time": "Tomorrow, 2:00 PM", "priority": "Urgent", "is_completed": False},
+        {"title": "Schedule Staff Training Batch #05 for Surat Franchise", "related_person_or_franchise": "Franchise OS - Surat Prime", "module": "Operations", "due_date_time": "2026-09-22, 10:00 AM", "priority": "Medium", "is_completed": True},
         {"title": "Follow up with Rahul Joshi on Plan A Agreement Terms", "related_person_or_franchise": "Rahul Joshi", "module": "Follow-ups", "due_date_time": "2026-09-21, 3:00 PM", "priority": "Medium", "is_completed": False},
-        {"title": "Audit Monthly Expense Sheet for Mumbai Hub", "related_person_or_franchise": "Coral Bios - Mumbai Hub", "module": "Expenses", "due_date_time": "2026-09-24, 4:00 PM", "priority": "Low", "is_completed": True},
+        {"title": "Audit Monthly Expense Sheet for Mumbai Hub", "related_person_or_franchise": "Franchise OS - Mumbai Hub", "module": "Expenses", "due_date_time": "2026-09-24, 4:00 PM", "priority": "Low", "is_completed": True},
         {"title": "Generate Quarterly Franchise Growth Performance Report", "related_person_or_franchise": "All Franchises", "module": "Reports", "due_date_time": "2026-09-25, 5:00 PM", "priority": "Medium", "is_completed": False},
         {"title": "Conduct Followup Call with Rohan Mehta (Surat)", "related_person_or_franchise": "Rohan Mehta", "module": "Calling History", "due_date_time": "2026-09-22, 12:00 PM", "priority": "High", "is_completed": False},
-        {"title": "Approve Agreement Draft for Ahmedabad West", "related_person_or_franchise": "Coral Bios - Ahmedabad West", "module": "Approval & Agreement", "due_date_time": "2026-09-23, 11:30 AM", "priority": "High", "is_completed": False}
+        {"title": "Approve Agreement Draft for Ahmedabad West", "related_person_or_franchise": "Franchise OS - Ahmedabad West", "module": "Approval & Agreement", "due_date_time": "2026-09-23, 11:30 AM", "priority": "High", "is_completed": False}
     ]
 
     for t_d in tasks_data:
@@ -445,11 +445,11 @@ def run_seed_all():
 
     # 15. Seed Initial Audit Logs
     if AuditLog.query.count() == 0:
-        log1 = AuditLog(stage_name="Authentication", action="LOGIN", performed_by="Super Admin", remarks="Super Admin logged into Coral Bios FMS")
+        log1 = AuditLog(stage_name="Authentication", action="LOGIN", performed_by="Super Admin", remarks="Super Admin logged into Franchise OS FMS")
         log2 = AuditLog(stage_name="Leads & Assignments", action="CREATE", performed_by="Rajesh Singh", remarks="Created new lead #L-1001 Rohan Mehta (Surat)")
         log3 = AuditLog(stage_name="Plans & Token", action="TOKEN_RECEIVED", performed_by="Priya Nair", remarks="Token amount Rs.50,000 recorded for Lead Priya Sharma")
-        log4 = AuditLog(stage_name="Franchise", action="CONVERT", performed_by="Vikram Singh", remarks="Converted Lead Amit Singh to Franchise #FR-MUMBAI (Coral Bios - Mumbai Hub)")
+        log4 = AuditLog(stage_name="Franchise", action="CONVERT", performed_by="Vikram Singh", remarks="Converted Lead Amit Singh to Franchise #FR-MUMBAI (Franchise OS - Mumbai Hub)")
         db.session.add_all([log1, log2, log3, log4])
         db.session.commit()
 
-    print("Coral Bios FMS complete demo database seeding completed successfully!")
+    print("Franchise OS FMS complete demo database seeding completed successfully!")

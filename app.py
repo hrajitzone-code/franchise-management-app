@@ -4,6 +4,7 @@ import datetime
 import hashlib
 import re
 import csv
+import time
 import openpyxl
 from pypdf import PdfReader
 from werkzeug.utils import secure_filename
@@ -304,22 +305,16 @@ with app.app_context():
 
 
 def get_current_user():
-    test_role = session.get('test_role') or request.args.get('test_role') or request.headers.get('X-Test-Role')
-    if test_role:
-        role_user = User.query.filter(User.role == test_role, User.is_active == True).first()
-        if role_user:
-            return role_user
-
     user_id = session.get('user_id')
-    if user_id:
-        u = User.query.get(user_id)
+    if not user_id:
+        return None
+    try:
+        u = db.session.get(User, user_id) if hasattr(db.session, 'get') else User.query.get(user_id)
         if u and u.is_active:
             return u
-    # Default fallback to Super Admin so application opens directly without login restriction
-    admin_user = User.query.filter(User.role == 'Super Admin', User.is_active == True).first()
-    if not admin_user:
-        admin_user = User.query.filter_by(is_active=True).first()
-    return admin_user
+    except Exception as e:
+        print(f"[AUTH DIAGNOSTIC] Exception in get_current_user: {e}")
+    return None
 
 def login_required(f):
     @wraps(f)
@@ -347,12 +342,41 @@ def permission_required(module, action):
 
 def scope_query_by_user(query, model):
     user = get_current_user()
-    if user and user.role not in ['Super Admin', 'Admin'] and user.franchise_id:
+    if not user:
+        return query.filter(db.false())
+    if user.role == 'Super Admin':
+        return query
+
+    if user.franchise_id is not None:
         if model == Franchise:
             return query.filter(Franchise.id == user.franchise_id)
         elif hasattr(model, 'franchise_id'):
             return query.filter(model.franchise_id == user.franchise_id)
+    else:
+        # Non-Super Admin user with franchise_id = NULL
+        # For store-level / franchisee roles, restrict to 0 records if store is unassigned
+        if user.role in ['Franchisee', 'Field Executive', 'Store Executive']:
+            return query.filter(db.false())
+
     return query
+
+def check_resource_franchise_access(resource):
+    user = get_current_user()
+    if not user:
+        return False
+    if user.role == 'Super Admin':
+        return True
+
+    res_fid = getattr(resource, 'id', None) if isinstance(resource, Franchise) else getattr(resource, 'franchise_id', None)
+
+    if user.franchise_id is not None:
+        if res_fid != user.franchise_id:
+            return False
+    else:
+        if user.role in ['Franchisee', 'Field Executive', 'Store Executive']:
+            return False
+
+    return True
 
 API_PERMISSION_MAP = {
     '/api/franchises': ('leads', {'GET': 'view', 'POST': 'add'}),
@@ -387,22 +411,33 @@ _db_initialized = False
 @app.before_request
 def initialize_database_lazily():
     global _db_initialized
+    if _db_initialized:
+        return
+
+    # Auth endpoints, health endpoint, and static assets must NEVER be blocked by DB checks
+    exempt_paths = ['/api/auth/me', '/api/auth/login', '/api/auth/logout', '/api/system/health']
+    if request.path in exempt_paths or not request.path.startswith('/api/'):
+        return
+
     is_production = bool(os.environ.get('VERCEL') or os.environ.get('DATABASE_URL'))
 
     if is_production:
-        # Verify production PostgreSQL database connectivity
-        try:
-            with db.engine.connect() as conn:
-                conn.execute(db.text("SELECT 1"))
-            _db_initialized = True
-        except Exception as e:
-            print(f"[PRODUCTION DB FAILURE] PostgreSQL unreachable: {e}")
-            if request.path.startswith('/api/') and request.path != '/api/system/health':
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Production database temporarily unavailable'
-                }), 503
-            return
+        # Verify production PostgreSQL database connectivity once on cold start
+        for attempt in range(2):
+            try:
+                with db.engine.connect() as conn:
+                    conn.execute(db.text("SELECT 1"))
+                _db_initialized = True
+                return
+            except Exception as e:
+                print(f"[PRODUCTION DB INITIALIZATION ATTEMPT {attempt+1}] PostgreSQL connection note: {e}")
+                if attempt == 0:
+                    time.sleep(0.2)
+
+        return jsonify({
+            'status': 'error',
+            'message': 'Production database temporarily unavailable'
+        }), 503
     else:
         if not _db_initialized:
             try:
@@ -410,6 +445,7 @@ def initialize_database_lazily():
                 check_and_migrate_db()
                 seed_default_expense_categories()
                 seed_initial_team_users()
+                _db_initialized = True
             except Exception as e:
                 try:
                     db.session.rollback()
@@ -423,9 +459,104 @@ def initialize_database_lazily():
             finally:
                 _db_initialized = True
 
+@app.after_request
+def add_cache_control_headers(response):
+    if request.path.startswith('/api/'):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    elif request.path == '/' or request.path.endswith('.html'):
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
+def resolve_api_module_and_action(path, method):
+    if '/approve' in path or '/convert_to_franchise' in path:
+        action = 'approve'
+    elif '/export' in path:
+        action = 'export'
+    elif method == 'GET':
+        action = 'view'
+    elif method == 'POST':
+        action = 'add'
+    elif method in ['PUT', 'PATCH']:
+        action = 'edit'
+    elif method == 'DELETE':
+        action = 'delete'
+    else:
+        action = 'view'
+
+    if path.startswith('/api/users') or path.startswith('/api/roles') or path.startswith('/api/system/health') or path.startswith('/api/google_sheets') or path.startswith('/api/seed_demo_data'):
+        return 'user_management', action
+    elif path.startswith('/api/leads') or path.startswith('/api/franchise'):
+        return 'leads', action
+    elif path.startswith('/api/calls'):
+        return 'calling', action
+    elif path.startswith('/api/followups'):
+        return 'followup', action
+    elif path.startswith('/api/surveys'):
+        return 'survey', action
+    elif path.startswith('/api/tokens') or path.startswith('/api/payments') or path.startswith('/api/company_support'):
+        return 'payments', action
+    elif path.startswith('/api/visit_expenses'):
+        return 'visit', action
+    elif path.startswith('/api/interior') or path.startswith('/api/interiors'):
+        return 'interior', action
+    elif path.startswith('/api/branding') or path.startswith('/api/marketing') or path.startswith('/api/operations'):
+        return 'marketing', action
+    elif path.startswith('/api/training'):
+        return 'training', action
+    elif path.startswith('/api/materials') or path.startswith('/api/purchases'):
+        return 'purchase', action
+    elif path.startswith('/api/gr_returns'):
+        return 'gr', action
+    elif path.startswith('/api/expenses'):
+        return 'expenses', action
+    elif path.startswith('/api/expense_categories'):
+        return 'settings', action
+    elif path.startswith('/api/complaints'):
+        return 'complaints', action
+    elif path.startswith('/api/reports') or path.startswith('/api/audit_logs') or path.startswith('/api/import_history') or path.startswith('/api/documents') or path.startswith('/api/extract_file') or path.startswith('/api/import_file'):
+        return 'reports', action
+
+    return None, action
+
 @app.before_request
 def enforce_rbac_api_permissions():
-    # Direct access enabled: all API routes proceed automatically with Super Admin privileges
+    path = request.path
+    if not path.startswith('/api/'):
+        return None
+
+    exempt_routes = ['/api/auth/login', '/api/auth/logout', '/api/auth/me', '/api/auth/switch_role', '/api/dashboard/stats', '/api/executives', '/api/file_url']
+    if path in exempt_routes:
+        if path == '/api/auth/me':
+            user = get_current_user()
+            if not user:
+                return jsonify({'authenticated': False, 'status': 'error', 'message': 'Not authenticated.'}), 401
+            return None
+        if path in ['/api/auth/login', '/api/auth/logout']:
+            return None
+        user = get_current_user()
+        if not user:
+            return jsonify({'status': 'error', 'message': 'Unauthorized access. Please login.'}), 401
+        return None
+
+    user = get_current_user()
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unauthorized access. Please login.'}), 401
+
+    if user.role == 'Super Admin':
+        return None
+
+    module, action = resolve_api_module_and_action(path, request.method)
+    if module:
+        if not user.has_permission(module, action):
+            return jsonify({
+                'status': 'error',
+                'error': f'Permission denied for action "{action}" in module "{module}". Access restricted.'
+            }), 403
+
     return None
 
 @app.errorhandler(500)
@@ -511,7 +642,7 @@ def get_dashboard_stats():
     date_preset = request.args.get('date_preset', 'Till Now')
     search_q = request.args.get('search', '').strip().lower()
 
-    query = Franchise.query
+    query = scope_query_by_user(Franchise.query, Franchise)
     if search_q:
         query = query.filter(
             (Franchise.name.ilike(f"%{search_q}%")) |
@@ -530,12 +661,12 @@ def get_dashboard_stats():
 
     total_franchises = len(franchises)
     active_franchises = sum(1 for f in franchises if (f.status or '').strip().lower() in ['active', 'franchise opening', 'completed'])
-    total_leads = Lead.query.count()
-    pending_followups = FollowUp.query.filter(FollowUp.status != 'Completed').count()
-    interested_plans = Lead.query.filter((Lead.plan_discussed != None) & (Lead.plan_discussed != '') & (Lead.plan_discussed != 'Not Decided')).count()
-    tokens_received = TokenRecord.query.filter(TokenRecord.status.ilike('%received%')).count()
+    total_leads = scope_query_by_user(Lead.query, Lead).count()
+    pending_followups = scope_query_by_user(FollowUp.query, FollowUp).filter(FollowUp.status != 'Completed').count()
+    interested_plans = scope_query_by_user(Lead.query, Lead).filter((Lead.plan_discussed != None) & (Lead.plan_discussed != '') & (Lead.plan_discussed != 'Not Decided')).count()
+    tokens_received = scope_query_by_user(TokenRecord.query, TokenRecord).filter(TokenRecord.status.ilike('%received%')).count()
     if tokens_received == 0:
-        tokens_received = TokenRecord.query.count()
+        tokens_received = scope_query_by_user(TokenRecord.query, TokenRecord).count()
 
     # Calculate month-over-month growth from real database timestamps
     now = datetime.datetime.utcnow()
@@ -831,12 +962,15 @@ def manage_franchises():
         log_audit(franchise.id, 'Franchise Creation', 'CREATE', assigned_person, 'Franchise', None, name, f"Created Franchise {name} ({code})")
         return jsonify({'status': 'success', 'franchise': franchise.to_dict()})
 
-    franchises = Franchise.query.order_by(Franchise.created_at.desc()).all()
+    franchises = scope_query_by_user(Franchise.query, Franchise).order_by(Franchise.created_at.desc()).all()
     return jsonify([f.to_dict() for f in franchises])
 
 @app.route('/api/franchise/<int:f_id>', methods=['PUT', 'DELETE'])
 def manage_single_franchise(f_id):
     franchise = Franchise.query.get_or_404(f_id)
+    if not check_resource_franchise_access(franchise):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         Lead.query.filter_by(franchise_id=f_id).delete()
         CallHistory.query.filter_by(franchise_id=f_id).delete()
@@ -879,6 +1013,9 @@ def manage_single_franchise(f_id):
 @app.route('/api/franchise/<int:f_id>/profile', methods=['GET'])
 def get_franchise_profile(f_id):
     franchise = Franchise.query.get_or_404(f_id)
+    if not check_resource_franchise_access(franchise):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     person_filter = request.args.get('person')
 
     leads = Lead.query.filter_by(franchise_id=f_id).all()
@@ -1125,7 +1262,7 @@ def manage_expenses():
     date_preset = request.args.get('date_preset', 'Till Now')
     search_q = request.args.get('search', '').strip().lower()
 
-    query = Expense.query
+    query = scope_query_by_user(Expense.query, Expense)
     if f_id:
         query = query.filter(Expense.franchise_id == int(f_id))
     if cat_filter:
@@ -1177,6 +1314,8 @@ def manage_expenses():
 @app.route('/api/expenses/<int:exp_id>', methods=['PUT', 'DELETE'])
 def update_delete_expense(exp_id):
     exp = Expense.query.get_or_404(exp_id)
+    if not check_resource_franchise_access(exp):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
     if request.method == 'DELETE':
         db.session.delete(exp)
         db.session.commit()
@@ -1240,12 +1379,15 @@ def manage_leads():
         log_audit(f_id or 1, 'Leads', 'CREATE', lead.assigned_person, 'Pre-Franchise Inquiry', None, lead.customer_name, f"Created Inquiry Lead: {lead.customer_name}")
         return jsonify({'status': 'success', 'lead': lead.to_dict()})
     
-    leads = Lead.query.order_by(Lead.created_at.desc()).all()
+    leads = scope_query_by_user(Lead.query, Lead).order_by(Lead.created_at.desc()).all()
     return jsonify([l.to_dict() for l in leads])
 
 @app.route('/api/leads/<int:l_id>', methods=['PUT', 'DELETE'])
 def update_delete_lead(l_id):
     lead = Lead.query.get_or_404(l_id)
+    if not check_resource_franchise_access(lead):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(lead)
         db.session.commit()
@@ -1284,6 +1426,8 @@ def update_delete_lead(l_id):
 @app.route('/api/leads/<int:l_id>/convert_to_franchise', methods=['POST'])
 def convert_lead_to_franchise(l_id):
     lead = Lead.query.get_or_404(l_id)
+    if not check_resource_franchise_access(lead):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
     data = request.json or request.form or {}
     
     tokens_recorded = TokenRecord.query.filter((TokenRecord.lead_id == lead.id) | (TokenRecord.customer_name == lead.customer_name)).all()
@@ -1436,6 +1580,9 @@ def manage_complaints():
 @app.route('/api/complaints/<int:c_id>', methods=['PUT', 'DELETE'])
 def update_delete_complaint(c_id):
     c = Complaint.query.get_or_404(c_id)
+    if not check_resource_franchise_access(c):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(c)
         db.session.commit()
@@ -1487,12 +1634,16 @@ def manage_followups():
         log_audit(f_id or 1, 'Follow-ups', 'CREATE', follow.person, 'Followup Entry', None, (follow.discussion or '')[:30], 'Created Followup Log')
         return jsonify({'status': 'success', 'followup': follow.to_dict()})
     
-    followups = FollowUp.query.order_by(FollowUp.followup_date.desc()).all()
+    query = scope_query_by_user(FollowUp.query, FollowUp)
+    followups = query.order_by(FollowUp.followup_date.desc()).all()
     return jsonify([f.to_dict() for f in followups])
 
 @app.route('/api/followups/<int:f_id>', methods=['PUT', 'DELETE'])
 def update_delete_followup(f_id):
     f = FollowUp.query.get_or_404(f_id)
+    if not check_resource_franchise_access(f):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(f)
         db.session.commit()
@@ -1554,7 +1705,7 @@ def manage_calls():
     lead_id = request.args.get('lead_id')
     franchise_id = request.args.get('franchise_id')
 
-    query = CallHistory.query
+    query = scope_query_by_user(CallHistory.query, CallHistory)
     if lead_id:
         query = query.filter_by(lead_id=int(lead_id))
     if franchise_id:
@@ -1568,6 +1719,8 @@ def manage_calls():
 @app.route('/api/calls/<int:c_id>', methods=['PUT', 'DELETE'])
 def update_delete_call(c_id):
     call = CallHistory.query.get_or_404(c_id)
+    if not check_resource_franchise_access(call):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
     if request.method == 'DELETE':
         db.session.delete(call)
         db.session.commit()
@@ -1620,12 +1773,15 @@ def manage_tokens():
         log_audit(f_id or 1, 'Token Advance', 'CREATE', t.person, 'Token Record', None, f"Rs.{t.token_amount}", 'Recorded Token Payment')
         return jsonify({'status': 'success', 'token': t.to_dict()})
 
-    tokens = TokenRecord.query.order_by(TokenRecord.created_at.desc()).all()
+    tokens = scope_query_by_user(TokenRecord.query, TokenRecord).order_by(TokenRecord.created_at.desc()).all()
     return jsonify([t.to_dict() for t in tokens])
 
 @app.route('/api/tokens/<int:t_id>', methods=['PUT', 'DELETE'])
 def update_delete_token(t_id):
     t = TokenRecord.query.get_or_404(t_id)
+    if not check_resource_franchise_access(t):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(t)
         db.session.commit()
@@ -1670,12 +1826,15 @@ def manage_payments():
         log_audit(f_id or 1, 'Payment', 'CREATE', p.person, 'Payment Receipt', None, f"Rs.{p.amount}", f"Received {p.payment_type}")
         return jsonify({'status': 'success', 'payment': p.to_dict()})
 
-    payments = Payment.query.order_by(Payment.created_at.desc()).all()
+    payments = scope_query_by_user(Payment.query, Payment).order_by(Payment.created_at.desc()).all()
     return jsonify([p.to_dict() for p in payments])
 
 @app.route('/api/payments/<int:p_id>', methods=['PUT', 'DELETE'])
 def update_delete_payment(p_id):
     p = Payment.query.get_or_404(p_id)
+    if not check_resource_franchise_access(p):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(p)
         db.session.commit()
@@ -1716,12 +1875,14 @@ def manage_branding():
         log_audit(b.franchise_id, 'Branding', 'CREATE', b.person, 'Branding Setup', None, f"Rs.{b.to_dict()['total_branding_cost']}", 'Recorded Branding Installation')
         return jsonify({'status': 'success', 'branding': b.to_dict()})
 
-    brandings = BrandingSetup.query.order_by(BrandingSetup.created_at.desc()).all()
+    brandings = scope_query_by_user(BrandingSetup.query, BrandingSetup).order_by(BrandingSetup.created_at.desc()).all()
     return jsonify([b.to_dict() for b in brandings])
 
 @app.route('/api/branding/<int:b_id>', methods=['PUT', 'DELETE'])
 def update_delete_branding(b_id):
     b = BrandingSetup.query.get_or_404(b_id)
+    if not check_resource_franchise_access(b):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
     if request.method == 'DELETE':
         db.session.delete(b)
         db.session.commit()
@@ -1761,12 +1922,15 @@ def manage_marketing():
         log_audit(m.franchise_id, 'Marketing', 'CREATE', m.person, 'Marketing Campaign', None, m.campaign_name, 'Recorded Marketing Campaign')
         return jsonify({'status': 'success', 'marketing': m.to_dict()})
 
-    marketings = MarketingCampaign.query.order_by(MarketingCampaign.created_at.desc()).all()
+    marketings = scope_query_by_user(MarketingCampaign.query, MarketingCampaign).order_by(MarketingCampaign.created_at.desc()).all()
     return jsonify([m.to_dict() for m in marketings])
 
 @app.route('/api/marketing/<int:m_id>', methods=['PUT', 'DELETE'])
 def update_delete_marketing(m_id):
     m = MarketingCampaign.query.get_or_404(m_id)
+    if not check_resource_franchise_access(m):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(m)
         db.session.commit()
@@ -1810,12 +1974,15 @@ def manage_training():
         log_audit(tr.franchise_id, 'Training', 'CREATE', tr.person, 'Training Batch', None, tr.batch_name, 'Recorded Staff Training')
         return jsonify({'status': 'success', 'training': tr.to_dict()})
 
-    trainings = TrainingRecord.query.order_by(TrainingRecord.created_at.desc()).all()
+    trainings = scope_query_by_user(TrainingRecord.query, TrainingRecord).order_by(TrainingRecord.created_at.desc()).all()
     return jsonify([tr.to_dict() for tr in trainings])
 
 @app.route('/api/training/<int:tr_id>', methods=['PUT', 'DELETE'])
 def update_delete_training(tr_id):
     tr = TrainingRecord.query.get_or_404(tr_id)
+    if not check_resource_franchise_access(tr):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(tr)
         db.session.commit()
@@ -1856,12 +2023,15 @@ def manage_operations():
         log_audit(op.franchise_id, 'Operations', 'CREATE', op.person, 'Ops Audit', None, f"Score {op.checklist_score}", 'Recorded Store Operations Audit')
         return jsonify({'status': 'success', 'operations': op.to_dict()})
 
-    ops = StoreOperations.query.order_by(StoreOperations.created_at.desc()).all()
+    ops = scope_query_by_user(StoreOperations.query, StoreOperations).order_by(StoreOperations.created_at.desc()).all()
     return jsonify([op.to_dict() for op in ops])
 
 @app.route('/api/operations/<int:op_id>', methods=['PUT', 'DELETE'])
 def update_delete_operations(op_id):
     op = StoreOperations.query.get_or_404(op_id)
+    if not check_resource_franchise_access(op):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(op)
         db.session.commit()
@@ -1905,12 +2075,14 @@ def manage_materials():
         log_audit(m.franchise_id, 'Material/Assets', 'CREATE', m.person, 'Asset Record', None, m.item_name, 'Issued Material Asset')
         return jsonify({'status': 'success', 'material': m.to_dict()})
 
-    materials = MaterialAsset.query.order_by(MaterialAsset.created_at.desc()).all()
+    materials = scope_query_by_user(MaterialAsset.query, MaterialAsset).order_by(MaterialAsset.created_at.desc()).all()
     return jsonify([m.to_dict() for m in materials])
 
 @app.route('/api/materials/<int:m_id>', methods=['PUT', 'DELETE'])
 def update_delete_material(m_id):
     m = MaterialAsset.query.get_or_404(m_id)
+    if not check_resource_franchise_access(m):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
     if request.method == 'DELETE':
         db.session.delete(m)
         db.session.commit()
@@ -2037,7 +2209,7 @@ def manage_surveys():
     status = request.args.get('status')
     search_q = request.args.get('search', '').strip().lower()
 
-    query = SurveyVersion.query
+    query = scope_query_by_user(SurveyVersion.query, SurveyVersion)
     if f_id: query = query.filter_by(franchise_id=int(f_id))
     if l_id: query = query.filter_by(lead_id=int(l_id))
     if status and status != 'ALL': query = query.filter_by(status=status)
@@ -2067,6 +2239,9 @@ def manage_surveys():
 @app.route('/api/surveys/<int:s_id>', methods=['GET', 'PUT', 'DELETE'])
 def manage_single_survey(s_id):
     survey = SurveyVersion.query.get_or_404(s_id)
+    if not check_resource_franchise_access(survey):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'GET':
         d = survey.to_dict()
         if survey.franchise_id:
@@ -2139,6 +2314,9 @@ def manage_single_survey(s_id):
 @app.route('/api/surveys/<int:s_id>/approve', methods=['POST'])
 def approve_survey_workflow(s_id):
     survey = SurveyVersion.query.get_or_404(s_id)
+    if not check_resource_franchise_access(survey):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     data = request.json or request.form or {}
     new_status = data.get('status', 'Approved')
     approved_by = data.get('approved_by') or 'Manager / Admin'
@@ -2200,7 +2378,7 @@ def manage_documents():
     l_id = request.args.get('lead_id')
     stage = request.args.get('stage')
 
-    query = Document.query
+    query = scope_query_by_user(Document.query, Document)
     if f_id: query = query.filter_by(franchise_id=int(f_id))
     if l_id: query = query.filter_by(lead_id=int(l_id))
     if stage: query = query.filter_by(stage_name=stage)
@@ -2234,12 +2412,15 @@ def manage_purchases():
         log_audit(p.franchise_id, 'Purchase', 'CREATE', p.person, 'Purchase Order', None, f"Rs.{p.amount}", f"Created Invoice {p.invoice_no}")
         return jsonify({'status': 'success', 'purchase': p.to_dict()})
 
-    purchases = Purchase.query.order_by(Purchase.created_at.desc()).all()
+    purchases = scope_query_by_user(Purchase.query, Purchase).order_by(Purchase.created_at.desc()).all()
     return jsonify([p.to_dict() for p in purchases])
 
 @app.route('/api/purchases/<int:p_id>', methods=['PUT', 'DELETE'])
 def update_delete_purchase(p_id):
     p = Purchase.query.get_or_404(p_id)
+    if not check_resource_franchise_access(p):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     if request.method == 'DELETE':
         db.session.delete(p)
         db.session.commit()
@@ -2281,12 +2462,15 @@ def manage_gr_returns():
             db.session.rollback()
             return jsonify({'status': 'error', 'message': f"Failed to save GR return record: {str(e)}"}), 500
 
-    grs = GRReturn.query.order_by(GRReturn.created_at.desc()).all()
+    grs = scope_query_by_user(GRReturn.query, GRReturn).order_by(GRReturn.created_at.desc()).all()
     return jsonify([g.to_dict() for g in grs])
 
 @app.route('/api/gr_returns/<int:g_id>', methods=['PUT', 'DELETE'])
 def update_delete_gr_return(g_id):
     gr = GRReturn.query.get_or_404(g_id)
+    if not check_resource_franchise_access(gr):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
+
     try:
         if request.method == 'DELETE':
             db.session.delete(gr)
@@ -2337,12 +2521,14 @@ def manage_company_support():
             db.session.rollback()
             return jsonify({'status': 'error', 'message': f"Failed to save company support record: {str(e)}"}), 500
 
-    supports = CompanySupport.query.order_by(CompanySupport.created_at.desc()).all()
+    supports = scope_query_by_user(CompanySupport.query, CompanySupport).order_by(CompanySupport.created_at.desc()).all()
     return jsonify([c.to_dict() for c in supports])
 
 @app.route('/api/company_support/<int:c_id>', methods=['PUT', 'DELETE'])
 def update_delete_company_support(c_id):
     cs = CompanySupport.query.get_or_404(c_id)
+    if not check_resource_franchise_access(cs):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
     try:
         if request.method == 'DELETE':
             db.session.delete(cs)
@@ -2371,6 +2557,11 @@ def update_delete_company_support(c_id):
         return jsonify({'status': 'error', 'message': f"Failed to update/delete company support record: {str(e)}"}), 500
 
 # --- INTERIOR & STORE CONSTRUCTION SETUP API ENDPOINTS ---
+
+@app.route('/static/<path:filename>')
+def serve_static_asset(filename):
+    static_dir = os.path.join(BASE_DIR, 'static')
+    return send_from_directory(static_dir, filename)
 
 @app.route('/uploads/interiors/<path:filename>')
 def serve_interior_upload(filename):
@@ -2489,12 +2680,14 @@ def manage_interiors():
             'interior': interior.to_dict()
         })
 
-    interiors = InteriorSetup.query.order_by(InteriorSetup.created_at.desc()).all()
+    interiors = scope_query_by_user(InteriorSetup.query, InteriorSetup).order_by(InteriorSetup.created_at.desc()).all()
     return jsonify([i.to_dict() for i in interiors])
 
 @app.route('/api/interiors/<int:i_id>', methods=['GET', 'PUT', 'DELETE'])
 def handle_single_interior(i_id):
     interior = InteriorSetup.query.get_or_404(i_id)
+    if not check_resource_franchise_access(interior):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
 
     if request.method == 'GET':
         return jsonify(interior.to_dict())
@@ -2645,7 +2838,7 @@ def seed_demo_data():
 
 @app.route('/api/audit_logs', methods=['GET'])
 def get_all_audit_logs():
-    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
+    logs = scope_query_by_user(AuditLog.query, AuditLog).order_by(AuditLog.timestamp.desc()).all()
     res = []
     for l in logs:
         d = l.to_dict()
@@ -2664,6 +2857,8 @@ def export_report():
 
     if f_id:
         franchise = Franchise.query.get_or_404(f_id)
+        if not check_resource_franchise_access(franchise):
+            return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
         f_dict = franchise.to_dict()
         purchases = Purchase.query.filter_by(franchise_id=f_id).all()
         grs = GRReturn.query.filter_by(franchise_id=f_id).all()
@@ -2699,8 +2894,8 @@ def export_report():
         pdf_bytes = generate_pdf_report(f_dict, timeline_items, fin_summary)
         return Response(pdf_bytes, mimetype='application/pdf', headers={'Content-Disposition': f'attachment;filename=Franchise_Report_{f_dict.get("code")}.pdf'})
     elif fmt == 'excel':
-        franchises = [Franchise.query.get(f_id).to_dict()] if f_id else [f.to_dict() for f in Franchise.query.all()]
-        audit_entries = [a.to_dict() for a in AuditLog.query.all()]
+        franchises = [Franchise.query.get(f_id).to_dict()] if f_id else [f.to_dict() for f in scope_query_by_user(Franchise.query, Franchise).all()]
+        audit_entries = [a.to_dict() for a in scope_query_by_user(AuditLog.query, AuditLog).all()]
         excel_bytes = generate_excel_report(franchises, audit_entries)
         return Response(excel_bytes, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers={'Content-Disposition': f'attachment;filename=Franchise_Report_{f_dict.get("code")}.xlsx'})
     elif fmt == 'word':
@@ -3095,7 +3290,7 @@ def manage_visit_expenses():
     date_preset = request.args.get('date_preset', 'Till Now')
     search_q = request.args.get('search', '').strip().lower()
 
-    query = VisitExpense.query
+    query = scope_query_by_user(VisitExpense.query, VisitExpense)
     if franchise_id:
         query = query.filter(VisitExpense.franchise_id == franchise_id)
     if person_filter:
@@ -3167,6 +3362,8 @@ def manage_visit_expenses():
 @app.route('/api/visit_expenses/<int:item_id>', methods=['GET', 'PUT', 'DELETE'])
 def detail_visit_expense(item_id):
     ve = VisitExpense.query.get_or_404(item_id)
+    if not check_resource_franchise_access(ve):
+        return jsonify({'status': 'error', 'error': 'Access denied to this franchise record.'}), 403
     if request.method == 'GET':
         return jsonify(ve.to_dict())
 
@@ -3324,14 +3521,26 @@ def auth_login():
 
 @app.route('/api/auth/logout', methods=['POST'])
 def auth_logout():
-    user = get_current_user()
-    if user:
-        log_audit(user.franchise_id, 'User Auth', 'Logout', user.full_name, remarks=f"User {user.username} logged out.")
+    try:
+        user_id = session.get('user_id')
+        if user_id:
+            user = get_current_user()
+            if user:
+                log_audit(user.franchise_id, 'User Auth', 'Logout', user.full_name, remarks=f"User {user.username} logged out.")
+    except Exception as e:
+        print(f"[AUTH DIAGNOSTIC] Audit log note on logout: {e}")
     session.clear()
-    return jsonify({'status': 'success', 'message': 'Logged out successfully.'})
+    session.modified = True
+    cookie_name = app.config.get('SESSION_COOKIE_NAME', 'session')
+    res = jsonify({'status': 'success', 'message': 'Logged out successfully.'})
+    res.delete_cookie(cookie_name)
+    return res
 
 @app.route('/api/auth/me', methods=['GET'])
 def auth_me():
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'authenticated': False, 'status': 'error', 'message': 'Not authenticated.'}), 401
     user = get_current_user()
     if not user:
         return jsonify({'authenticated': False, 'status': 'error', 'message': 'Not authenticated.'}), 401
